@@ -1,0 +1,18 @@
+{
+  "id": "example-triage",
+  "kind": "git-commit-triage",
+  "phase": "L1",
+  "cadence": "1d",
+  "paused": false,
+  "state_file": ".loop-state/state.json",
+  "target": {
+    "repo": "/absolute/path/to/your/target/repo",
+    "refs": ["main"],
+    "first_run_since": "7 days ago"
+  },
+  "budget": {
+    "max_tokens": 50000,
+    "max_iterations": 1,
+    "wall_clock_secs": 300
+  }
+}

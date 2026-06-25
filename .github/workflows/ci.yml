@@ -1,0 +1,72 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  rust:
+    name: loopguard (Rust)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: fmt
+        run: cargo fmt --all -- --check
+      - name: clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: test
+        run: cargo test --all
+      - name: build release
+        run: cargo build --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: loopguard-linux
+          path: target/release/loopguard
+
+  python:
+    name: loopengine (Python)
+    runs-on: ubuntu-latest
+    needs: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: build loopguard (needed by integration tests)
+        run: cargo build --release
+      - name: install loopengine
+        run: pip install -e "loopengine[dev]"
+      - name: pytest
+        run: pytest loopengine/tests -q
+
+  daily-triage:
+    name: daily-triage (manual, report-only)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    needs: [rust, python]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - run: pip install -e loopengine
+      - name: triage this repo (self), report-only
+        run: |
+          cat > loops/ci-self.json <<JSON
+          { "id": "ci-self-triage", "kind": "git-commit-triage", "phase": "L1",
+            "state_file": ".loop-state/state.json",
+            "target": { "repo": ".", "refs": ["main"], "first_run_since": "14 days ago" },
+            "budget": { "max_tokens": 50000, "max_iterations": 1, "wall_clock_secs": 300 } }
+          JSON
+          loopengine run loops/ci-self.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: triage-state
+          path: .loop-state/

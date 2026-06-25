@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/krishddd/Strive_Engineering/schemas/loop.schema.json",
+  "title": "Loop specification",
+  "description": "A loop the loopengine runtime can execute. A valid loop has a trigger (cadence), a verifier, external state, and brakes/escalation.",
+  "type": "object",
+  "required": ["id", "kind", "phase", "target", "budget"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "description": "Unique loop id; keys its state section." },
+    "kind": {
+      "type": "string",
+      "enum": ["git-commit-triage"],
+      "description": "Loop type. git-commit-triage: read-only triage of recent commits."
+    },
+    "phase": {
+      "type": "string",
+      "enum": ["L0", "L1", "L2", "L3"],
+      "description": "Rollout phase. L1 = report-only."
+    },
+    "cadence": {
+      "type": "string",
+      "description": "Human-readable trigger cadence (e.g. '1d'). Enforced by the scheduler, not the runtime."
+    },
+    "paused": { "type": "boolean", "default": false, "description": "Kill switch." },
+    "state_file": { "type": "string", "description": "Path to the JSON state file." },
+    "target": {
+      "type": "object",
+      "required": ["repo", "refs"],
+      "additionalProperties": false,
+      "properties": {
+        "repo": { "type": "string", "description": "Absolute path to the read-only target git repo." },
+        "refs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Branches/refs to watch. If 2+, ahead/behind divergence is reported."
+        },
+        "first_run_since": {
+          "type": "string",
+          "default": "7 days ago",
+          "description": "Lookback window for the first run (no cursor yet)."
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Hard brakes (enforced by the Rust core, mirrored in Python).",
+      "properties": {
+        "max_tokens": { "type": "integer", "minimum": 0 },
+        "max_iterations": { "type": "integer", "minimum": 1, "default": 1 },
+        "wall_clock_secs": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

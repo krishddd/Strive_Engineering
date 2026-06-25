@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>loopengine — observability</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 0; background:#0d1117; color:#e6edf3; }
+    header { padding: 16px 24px; border-bottom: 1px solid #21262d; display:flex; gap:12px; align-items:baseline; }
+    h1 { font-size: 18px; margin: 0; }
+    .muted { color:#8b949e; }
+    main { padding: 24px; max-width: 1000px; margin: 0 auto; }
+    .row { display:flex; gap:12px; align-items:center; margin: 12px 0; }
+    input[type=file] { color:#8b949e; }
+    .pill { padding:2px 8px; border-radius:10px; font-size:12px; font-weight:600; }
+    .found { background:#1f6feb33; color:#79c0ff; }
+    .clean { background:#23863633; color:#3fb950; }
+    .error, .escalated { background:#f8514933; color:#ff7b72; }
+    .card { border:1px solid #21262d; border-radius:8px; padding:16px; margin:16px 0; background:#161b22; }
+    .high { border-left:3px solid #ff7b72; padding-left:10px; margin:6px 0; }
+    .watch { border-left:3px solid #d29922; padding-left:10px; margin:6px 0; color:#c9d1d9; }
+    code { background:#21262d; padding:1px 5px; border-radius:4px; color:#79c0ff; }
+    .empty { color:#8b949e; font-style: italic; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>loopengine</h1>
+    <span class="muted">read-only observability — load a <code>state.json</code></span>
+  </header>
+  <main>
+    <div class="row">
+      <input id="file" type="file" accept="application/json" />
+      <span class="muted">or drop <code>.loop-state/state.json</code> here</span>
+    </div>
+    <div id="out"><p class="empty">No state loaded.</p></div>
+  </main>
+  <script>
+    const out = document.getElementById('out');
+    const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+    function render(data) {
+      const loops = (data && data.loops) || {};
+      const ids = Object.keys(loops);
+      if (!ids.length) { out.innerHTML = '<p class="empty">No loops in this state file.</p>'; return; }
+      out.innerHTML = ids.map(id => {
+        const s = loops[id];
+        const findings = s.findings || [];
+        const high = findings.filter(f => f.bucket === 'high');
+        const watch = findings.filter(f => f.bucket === 'watch');
+        const cursors = Object.entries(s.cursors || {})
+          .map(([k, v]) => `<div class="muted"><code>${esc(k)}</code> → <code>${esc((v||'').slice(0,10))}</code></div>`).join('');
+        const body = high.length || watch.length
+          ? high.map(f => `<div class="high">${esc(f.text)} <code>${esc(f.sha)}</code></div>`).join('')
+            + watch.map(f => `<div class="watch">${esc(f.text)} <code>${esc(f.sha)}</code></div>`).join('')
+          : `<p class="empty">No actionable findings ${s.note ? '— ' + esc(s.note) : ''}</p>`;
+        return `<div class="card">
+          <div class="row">
+            <strong>${esc(id)}</strong>
+            <span class="pill ${esc(s.last_result)}">${esc(s.last_result)}</span>
+            <span class="muted">phase ${esc(s.phase)} · ${esc(s.last_run)}</span>
+          </div>
+          ${cursors}
+          <div class="muted" style="margin:8px 0">${high.length} high · ${watch.length} watch</div>
+          ${body}
+        </div>`;
+      }).join('');
+    }
+
+    document.getElementById('file').addEventListener('change', e => {
+      const f = e.target.files[0]; if (!f) return;
+      f.text().then(t => { try { render(JSON.parse(t)); } catch (err) { out.innerHTML = '<p class="error">Invalid JSON</p>'; } });
+    });
+    document.addEventListener('dragover', e => e.preventDefault());
+    document.addEventListener('drop', e => {
+      e.preventDefault(); const f = e.dataTransfer.files[0]; if (!f) return;
+      f.text().then(t => { try { render(JSON.parse(t)); } catch (err) { out.innerHTML = '<p class="error">Invalid JSON</p>'; } });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+.venv/
+
+# Loop runtime: local state + real (private) target config stay out of the repo
+.loop-state/
+loop.config
+loops/local-*.json
+LOOP_PAUSE
+
+# Source artifacts
+*.docx
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp

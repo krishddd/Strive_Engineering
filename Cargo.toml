@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = ["crates/loopguard"]
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+authors = ["krishddd"]
+repository = "https://github.com/krishddd/Strive_Engineering"
+
+[profile.release]
+lto = true
+codegen-units = 1
