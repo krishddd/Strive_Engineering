@@ -13,6 +13,7 @@ and the orchestration in **Python**.
 ![rust](https://img.shields.io/badge/rust-loopguard-orange?logo=rust)
 ![python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![phase](https://img.shields.io/badge/phase-L1%20report--only-23863633)
+![status](https://img.shields.io/badge/status-active-brightgreen)
 
 </div>
 
