@@ -22,6 +22,11 @@ from typing import Protocol
 # claude-opus-4-8 unless the user names another model.)
 DEFAULT_MODEL = "claude-opus-4-8"
 
+# NVIDIA NIM: free, OpenAI-compatible endpoint (key prefix nvapi-, ~40 req/min).
+# Default to a model that supports structured output and reliable JSON.
+NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
+DEFAULT_NVIDIA_MODEL = "meta/llama-3.3-70b-instruct"
+
 # Structured-output schema: the model must return a list of files to write.
 _FILES_SCHEMA = {
     "type": "object",
@@ -86,6 +91,110 @@ class AnthropicClient:
         return json.loads(text)
 
 
+def _extract_json(text: str) -> dict:
+    """Pull a JSON object out of a model response — robust to code fences, prose
+    preambles, and reasoning models that emit <think> blocks before the JSON."""
+    import re as _re
+
+    t = _re.sub(r"<think>.*?</think>", "", text, flags=_re.DOTALL).strip()
+    # Strip a ```json ... ``` fence if present.
+    fence = _re.search(r"```(?:json)?\s*(\{.*?\})\s*```", t, flags=_re.DOTALL)
+    if fence:
+        return json.loads(fence.group(1))
+    # Otherwise scan for the first balanced top-level {...}.
+    start = t.find("{")
+    if start == -1:
+        raise ValueError("no JSON object found in model response")
+    depth = 0
+    in_str = False
+    esc = False
+    for i in range(start, len(t)):
+        c = t[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+        elif c == '"':
+            in_str = True
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return json.loads(t[start : i + 1])
+    raise ValueError("unbalanced JSON object in model response")
+
+
+class OpenAICompatibleClient:
+    """LLMClient for any OpenAI-compatible /v1/chat/completions endpoint — most
+    usefully NVIDIA NIM's free tier (build.nvidia.com). Uses only the standard
+    library (urllib), so there is no SDK dependency. The HTTP call is isolated in
+    ``transport`` so the client is testable without a network or key.
+    """
+
+    def __init__(
+        self,
+        model: str,
+        base_url: str = NVIDIA_BASE_URL,
+        api_key_env: str = "NVIDIA_API_KEY",
+        max_tokens: int = 8000,
+        transport=None,
+    ) -> None:
+        self.model = model
+        self.base_url = base_url.rstrip("/")
+        self.api_key_env = api_key_env
+        self.max_tokens = max_tokens
+        self.transport = transport or self._http_transport
+
+    def complete_json(self, system: str, user: str, schema: dict) -> dict:
+        user_with_schema = (
+            f"{user}\n\nRespond with ONLY a single JSON object matching this schema "
+            f"(no prose, no code fence):\n{json.dumps(schema)}"
+        )
+        import urllib.error
+
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_with_schema},
+            ],
+            "temperature": 0.2,
+            "max_tokens": self.max_tokens,
+            "response_format": {"type": "json_object"},
+        }
+        try:
+            content = self.transport(payload)
+        except urllib.error.HTTPError as e:
+            if e.code != 400:
+                raise
+            # Some free NIM models reject response_format — retry without it.
+            # The prompt still demands JSON and _extract_json is forgiving.
+            payload.pop("response_format", None)
+            content = self.transport(payload)
+        return _extract_json(content)
+
+    def _http_transport(self, payload: dict) -> str:
+        import os
+        import urllib.request
+
+        key = os.environ.get(self.api_key_env)
+        if not key:
+            raise RuntimeError(f"{self.api_key_env} is not set (get a free key at build.nvidia.com)")
+        req = urllib.request.Request(
+            f"{self.base_url}/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=120) as resp:  # noqa: S310 — fixed https endpoint
+            data = json.loads(resp.read().decode("utf-8"))
+        return data["choices"][0]["message"]["content"]
+
+
 class LLMMaker:
     """A maker that prompts an LLM agent to produce file edits, then writes them
     into the worktree. Conforms to the AssistedFixLoop maker signature."""
@@ -142,9 +251,34 @@ class LLMMaker:
 def make_maker(cfg: dict):
     """Build a maker from a spec's ``maker`` config block.
 
-    ``{"type": "llm", "model": "claude-opus-4-8"}`` → an LLMMaker backed by Claude.
+    - ``{"type": "llm", "model": "claude-opus-4-8"}`` → Claude (Anthropic).
+    - ``{"type": "nvidia", "model": "meta/llama-3.3-70b-instruct"}`` → NVIDIA NIM
+      free tier (set NVIDIA_API_KEY).
+    - ``{"type": "openai", "base_url": "...", "model": "...", "api_key_env": "..."}``
+      → any OpenAI-compatible endpoint.
     """
     kind = cfg.get("type")
     if kind == "llm":
         return LLMMaker(AnthropicClient(model=cfg.get("model", DEFAULT_MODEL)))
+    if kind == "nvidia":
+        return LLMMaker(
+            OpenAICompatibleClient(
+                model=cfg.get("model", DEFAULT_NVIDIA_MODEL),
+                base_url=cfg.get("base_url", NVIDIA_BASE_URL),
+                api_key_env=cfg.get("api_key_env", "NVIDIA_API_KEY"),
+            )
+        )
+    if kind == "openai":
+        base_url = cfg.get("base_url")
+        if not base_url:
+            raise ValueError("openai maker requires a base_url")
+        if "model" not in cfg:
+            raise ValueError("openai maker requires a model")
+        return LLMMaker(
+            OpenAICompatibleClient(
+                model=cfg["model"],
+                base_url=base_url,
+                api_key_env=cfg.get("api_key_env", "OPENAI_API_KEY"),
+            )
+        )
     raise ValueError(f"unknown maker type: {kind!r}")

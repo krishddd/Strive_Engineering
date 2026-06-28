@@ -10,8 +10,8 @@
   "task": "Fix the failing unit test in the parser module.",
   "test_command": "python -m pytest -q",
   "maker": {
-    "type": "llm",
-    "model": "claude-opus-4-8"
+    "type": "nvidia",
+    "model": "meta/llama-3.3-70b-instruct"
   },
   "budget": {
     "max_tokens": 200000,

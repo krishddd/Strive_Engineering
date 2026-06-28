@@ -158,14 +158,39 @@ worktree off base_ref → maker proposes an edit → checker gates it:
 → on success: commit to a branch and leave it for a human — it never auto-merges
 ```
 
-The maker is where the loop **actually prompts an agent**. It's pluggable:
+The maker is where the loop **actually prompts an agent**. It's pluggable across
+providers:
 
+- `"maker": {"type": "nvidia", "model": "meta/llama-3.3-70b-instruct"}` — a **free**
+  model via [NVIDIA NIM](https://build.nvidia.com) (OpenAI-compatible, no card, set
+  `NVIDIA_API_KEY`). **No extra dependency** — stdlib HTTP only. See *Free models* below.
 - `"maker": {"type": "llm", "model": "claude-opus-4-8"}` — a **Claude-backed
-  implementer** (`loopengine.makers.LLMMaker`) that reads the task + the worktree
-  snapshot + the checker's prior reflections and returns file edits via structured
-  output. Install with `pip install -e "loopengine[llm]"` and set `ANTHROPIC_API_KEY`.
-- `"maker_command": "..."` — a shell command run in the worktree.
-- or inject any Python callable programmatically.
+  implementer**. Install `pip install -e "loopengine[llm]"`, set `ANTHROPIC_API_KEY`.
+- `"maker": {"type": "openai", "base_url": "...", "model": "...", "api_key_env": "..."}`
+  — any OpenAI-compatible endpoint (Groq, OpenRouter, a local NIM container, …).
+- `"maker_command": "..."` — a shell command run in the worktree; or inject any
+  Python callable programmatically.
+
+### Free models for development (NVIDIA NIM)
+
+NVIDIA's [build.nvidia.com](https://build.nvidia.com) gives free, OpenAI-compatible
+API access (~40 req/min, no credit card) to 100+ models. Recommended picks for this
+pipeline — switching is a one-line `model` change:
+
+| Use | Model id | Why |
+|---|---|---|
+| **Assisted-fix maker (default)** | `meta/llama-3.3-70b-instruct` | Reliable JSON / structured output, fast, free |
+| **Best code quality** | `qwen/qwen3-coder-480b-a35b-instruct` | Purpose-built for agentic coding |
+| **Reasoning-heavy fixes** | `deepseek-ai/deepseek-r1` | Strong reasoning (the maker strips its `<think>` blocks) |
+| **Cheap/fast side tasks** | `meta/llama-3.1-8b-instruct` | Lowest latency for light work |
+
+```bash
+export NVIDIA_API_KEY=nvapi-...          # free key from build.nvidia.com
+loopengine run loops/example-l3-autofix.json   # spec uses {"type":"nvidia",...}
+```
+
+The same maker also works with other free OpenAI-compatible tiers (Groq, Google AI
+Studio via a proxy, OpenRouter free models) — use `{"type":"openai","base_url":...}`.
 
 Whatever the maker proposes is still gated by the integrity scanner and the test
 command — a model that tries to delete the failing test is caught and escalated,

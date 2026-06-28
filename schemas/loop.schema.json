@@ -27,12 +27,14 @@
     },
     "maker": {
       "type": "object",
-      "description": "assisted-fix only: an agent maker that proposes file edits. Currently {type: 'llm', model: ...} for a Claude-backed implementer.",
+      "description": "assisted-fix only: an agent maker that proposes file edits. 'llm' = Claude; 'nvidia' = NVIDIA NIM free tier; 'openai' = any OpenAI-compatible endpoint.",
       "required": ["type"],
       "additionalProperties": true,
       "properties": {
-        "type": { "type": "string", "enum": ["llm"] },
-        "model": { "type": "string", "description": "Claude model id; defaults to claude-opus-4-8." }
+        "type": { "type": "string", "enum": ["llm", "nvidia", "openai"] },
+        "model": { "type": "string", "description": "Model id. llm: claude-opus-4-8; nvidia: e.g. meta/llama-3.3-70b-instruct or qwen/qwen3-coder-480b-a35b-instruct." },
+        "base_url": { "type": "string", "description": "openai only: the /v1 base URL of the OpenAI-compatible endpoint." },
+        "api_key_env": { "type": "string", "description": "Env var holding the API key (nvidia: NVIDIA_API_KEY; openai: OPENAI_API_KEY)." }
       }
     },
     "allowlist": {

@@ -11,7 +11,7 @@ from .budget import Budget, BudgetExceeded
 from .connectors import ConnectorError, GuardedConnector, build_connector
 from .consistency import ConsensusResult, majority_vote
 from .core import Loopguard, LoopguardUnavailable
-from .makers import AnthropicClient, LLMMaker, make_maker
+from .makers import AnthropicClient, LLMMaker, OpenAICompatibleClient, make_maker
 from .reflexion import Critique, ReflexionResult, run_reflexion
 from .state import StateStore
 from .validate import SpecInvalid, validate_spec
@@ -32,6 +32,7 @@ __all__ = [
     "Loopguard",
     "LoopguardUnavailable",
     "AnthropicClient",
+    "OpenAICompatibleClient",
     "LLMMaker",
     "make_maker",
     "Critique",

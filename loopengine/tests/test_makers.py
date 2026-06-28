@@ -17,7 +17,7 @@ import pytest
 
 from loopengine.assisted import AssistedFixLoop
 from loopengine.core import LoopguardUnavailable, find_loopguard
-from loopengine.makers import LLMMaker, make_maker
+from loopengine.makers import LLMMaker, OpenAICompatibleClient, make_maker
 from loopengine.state import StateStore
 
 try:
@@ -63,6 +63,73 @@ def test_llm_maker_refuses_path_traversal(tmp_path):
 def test_make_maker_unknown_type():
     with pytest.raises(ValueError):
         make_maker({"type": "telepathy"})
+
+
+# -- OpenAI-compatible (NVIDIA NIM) client, no network -----------------------
+
+def test_openai_client_parses_response_via_fake_transport():
+    captured = {}
+
+    def transport(payload: dict) -> str:
+        captured["model"] = payload["model"]
+        # Simulate a chatty model: code fence + prose around the JSON.
+        return 'Sure!\n```json\n{"files": [{"path": "a.py", "content": "x = 1\\n"}]}\n```'
+
+    client = OpenAICompatibleClient(model="meta/llama-3.3-70b-instruct", transport=transport)
+    out = client.complete_json("sys", "fix it", {"type": "object"})
+    assert out["files"][0]["path"] == "a.py"
+    assert captured["model"] == "meta/llama-3.3-70b-instruct"
+
+
+def test_openai_client_handles_reasoning_think_block():
+    def transport(payload: dict) -> str:
+        return '<think>I should return JSON</think>\n{"files": []}'
+
+    client = OpenAICompatibleClient(model="deepseek-ai/deepseek-r1", transport=transport)
+    assert client.complete_json("s", "u", {}) == {"files": []}
+
+
+def test_openai_client_retries_without_response_format_on_400():
+    import urllib.error
+
+    calls = []
+
+    def transport(payload: dict) -> str:
+        calls.append("response_format" in payload)
+        if "response_format" in payload:
+            raise urllib.error.HTTPError("u", 400, "bad response_format", {}, None)
+        return '{"files": []}'
+
+    client = OpenAICompatibleClient(model="some/model", transport=transport)
+    assert client.complete_json("s", "u", {}) == {"files": []}
+    assert calls == [True, False]  # tried with, then retried without
+
+
+def test_make_maker_nvidia_builds_without_network():
+    maker = make_maker({"type": "nvidia", "model": "qwen/qwen3-coder-480b-a35b-instruct"})
+    assert isinstance(maker, LLMMaker)
+    assert isinstance(maker.client, OpenAICompatibleClient)
+    assert maker.client.api_key_env == "NVIDIA_API_KEY"
+
+
+def test_make_maker_openai_requires_base_url():
+    with pytest.raises(ValueError):
+        make_maker({"type": "openai", "model": "x"})
+
+
+def test_nvidia_maker_drives_loop_with_fake_transport(tmp_path):
+    # The NVIDIA-backed maker, faked, fixes a file end-to-end via the LLMMaker path.
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    (wt / "value.py").write_text("def value():\n    return 1\n")
+
+    def transport(payload: dict) -> str:
+        return '{"files": [{"path": "value.py", "content": "def value():\\n    return 42\\n"}]}'
+
+    maker = make_maker({"type": "nvidia"})
+    maker.client.transport = transport  # inject fake transport post-build
+    maker(wt, "make value() return 42", reflections=[])
+    assert "return 42" in (wt / "value.py").read_text()
 
 
 @pytest.mark.skipif(not HAVE_GUARD, reason="loopguard binary not built")

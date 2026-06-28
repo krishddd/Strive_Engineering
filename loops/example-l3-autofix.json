@@ -9,15 +9,33 @@
   },
   "task": "Fix the failing docs/changelog formatting check.",
   "test_command": "python -m pytest -q",
-  "maker": { "type": "llm", "model": "claude-opus-4-8" },
+  "maker": {
+    "type": "nvidia",
+    "model": "meta/llama-3.3-70b-instruct"
+  },
   "allowlist": {
-    "allow_globs": ["docs/**", "**/*.md", "CHANGELOG.md"],
-    "deny_globs": ["**/auth/**", "**/secrets/**", ".github/workflows/**"],
+    "allow_globs": [
+      "docs/**",
+      "**/*.md",
+      "CHANGELOG.md"
+    ],
+    "deny_globs": [
+      "**/auth/**",
+      "**/secrets/**",
+      ".github/workflows/**"
+    ],
     "max_files": 3,
     "max_lines": 40
   },
   "connectors": [
-    { "name": "github", "scope": "read" }
+    {
+      "name": "github",
+      "scope": "read"
+    }
   ],
-  "budget": { "max_tokens": 200000, "max_iterations": 3, "wall_clock_secs": 600 }
+  "budget": {
+    "max_tokens": 200000,
+    "max_iterations": 3,
+    "wall_clock_secs": 600
+  }
 }
