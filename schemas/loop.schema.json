@@ -25,6 +25,16 @@
       "type": "string",
       "description": "assisted-fix only: shell command run in the worktree to produce the change (the agent-step placeholder). Omitted when a maker callable is supplied programmatically."
     },
+    "maker": {
+      "type": "object",
+      "description": "assisted-fix only: an agent maker that proposes file edits. Currently {type: 'llm', model: ...} for a Claude-backed implementer.",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "type": "string", "enum": ["llm"] },
+        "model": { "type": "string", "description": "Claude model id; defaults to claude-opus-4-8." }
+      }
+    },
     "phase": {
       "type": "string",
       "enum": ["L0", "L1", "L2", "L3"],

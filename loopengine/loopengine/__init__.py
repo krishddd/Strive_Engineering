@@ -10,6 +10,7 @@ from .assisted import AssistedFixLoop, AssistedResult, ScriptMaker
 from .budget import Budget, BudgetExceeded
 from .consistency import ConsensusResult, majority_vote
 from .core import Loopguard, LoopguardUnavailable
+from .makers import AnthropicClient, LLMMaker, make_maker
 from .reflexion import Critique, ReflexionResult, run_reflexion
 from .state import StateStore
 from .validate import SpecInvalid, validate_spec
@@ -26,6 +27,9 @@ __all__ = [
     "majority_vote",
     "Loopguard",
     "LoopguardUnavailable",
+    "AnthropicClient",
+    "LLMMaker",
+    "make_maker",
     "Critique",
     "ReflexionResult",
     "run_reflexion",

@@ -158,10 +158,19 @@ worktree off base_ref → maker proposes an edit → checker gates it:
 → on success: commit to a branch and leave it for a human — it never auto-merges
 ```
 
-The maker is pluggable: inject a Python callable, or set `maker_command` in the
-spec (the placeholder where you wire an agent/codegen step). Blast radius is a
-throwaway branch in an isolated worktree; `main` is never touched. See
-[`loops/example-assisted-fix.json`](loops/example-assisted-fix.json).
+The maker is where the loop **actually prompts an agent**. It's pluggable:
+
+- `"maker": {"type": "llm", "model": "claude-opus-4-8"}` — a **Claude-backed
+  implementer** (`loopengine.makers.LLMMaker`) that reads the task + the worktree
+  snapshot + the checker's prior reflections and returns file edits via structured
+  output. Install with `pip install -e "loopengine[llm]"` and set `ANTHROPIC_API_KEY`.
+- `"maker_command": "..."` — a shell command run in the worktree.
+- or inject any Python callable programmatically.
+
+Whatever the maker proposes is still gated by the integrity scanner and the test
+command — a model that tries to delete the failing test is caught and escalated,
+not merged. Blast radius is a throwaway branch in an isolated worktree; `main` is
+never touched. See [`loops/example-assisted-fix.json`](loops/example-assisted-fix.json).
 
 ## Build phases — gate before advancing
 
@@ -185,13 +194,14 @@ self-triage job.
 - ✅ Rust `loopguard`: guard + budget + verifier + diff-integrity + injection scanners —
   **23 unit tests**, fmt + clippy clean.
 - ✅ Python `loopengine`: runtime, state, CLI, self-consistency, Reflexion, schema
-  validation, **worktree isolation**, and the **L2 `assisted-fix` loop** — **20 tests**;
-  end-to-end coverage of triage `found → clean`, fatal escalation, the research features,
-  and assisted-fix (success-via-reflexion, reward-hack-caught, cap-escalation, injection-blocked).
+  validation, **worktree isolation**, the **L2 `assisted-fix` loop**, and a **Claude-backed
+  agent maker** — **24 tests**; end-to-end coverage of triage `found → clean`, fatal
+  escalation, the research features, assisted-fix (success-via-reflexion, reward-hack-caught,
+  cap-escalation, injection-blocked), and the LLM maker (fake-client, path-traversal refusal,
+  full loop to `proposed`).
 - ✅ JSON schema (per-kind conditional validation), example loops, dashboard, CI,
   [arXiv bibliography](docs/research-arxiv.md).
-- 🚧 Planned: wire a real agent maker into `assisted-fix`; richer dashboard; MCP connectors
-  behind the injection gate; L3 allowlist.
+- 🚧 Planned: richer dashboard; MCP connectors behind the injection gate; L3 unattended allowlist.
 
 ## License
 

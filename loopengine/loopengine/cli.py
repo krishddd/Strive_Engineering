@@ -29,8 +29,10 @@ def cmd_run(args: argparse.Namespace) -> int:
     try:
         if spec.get("kind") == "assisted-fix":
             from .assisted import AssistedFixLoop
+            from .makers import make_maker
 
-            res = AssistedFixLoop(spec, state).run()
+            maker = make_maker(spec["maker"]) if spec.get("maker") else None
+            res = AssistedFixLoop(spec, state, maker=maker).run()
             print(f"[{res.result}] {spec['id']}: {res.attempts} attempt(s) — {res.note}")
             if res.branch:
                 print(f"  branch for review: {res.branch} @ {res.commit}")
