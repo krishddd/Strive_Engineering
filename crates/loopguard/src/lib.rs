@@ -15,10 +15,12 @@ pub mod budget;
 pub mod guard;
 pub mod injection;
 pub mod integrity;
+pub mod policy;
 pub mod verifier;
 
 pub use budget::{BrakeReason, Budget, Ledger};
 pub use guard::{Decision, Guard};
 pub use injection::{scan as scan_injection, InjectionReport, Severity};
 pub use integrity::{scan_diff, IntegrityIssue, IntegrityReport};
+pub use policy::{evaluate as evaluate_policy, AllowPolicy, PolicyDecision};
 pub use verifier::{verify_batch, verify_commit_sha, BatchResult, ClaimVerdict, Verdict};

@@ -103,7 +103,7 @@ annotated bibliography in [`docs/research-arxiv.md`](docs/research-arxiv.md):
 | Automations / scheduling | loop `cadence` + the runtime's single-pass trigger |
 | Worktrees (isolation) | `loopengine.worktree` — every assisted-fix attempt runs in an isolated worktree |
 | Skills (codified knowledge) | loop specs + `docs/` patterns |
-| Connectors (MCP) | none yet — read-only `git` only, zero write scope |
+| Connectors (MCP) | `loopengine.connectors` — every tool return is injection-scanned before the loop acts (read-only by default) |
 | Sub-agents (maker/checker) | the **assisted-fix** loop: maker proposes, checker (integrity + tests) verifies |
 | Memory / external state | `loopengine.state` — JSON state + JSONL run log |
 
@@ -172,11 +172,31 @@ command — a model that tries to delete the failing test is caught and escalate
 not merged. Blast radius is a throwaway branch in an isolated worktree; `main` is
 never touched. See [`loops/example-assisted-fix.json`](loops/example-assisted-fix.json).
 
+### L3 — unattended, allowlist-gated (`assisted-fix` with `phase: "L3"`)
+
+At L3 the loop may act on its own — but only inside a tight allowlist. After the
+verifier passes, the diff goes through a deterministic **allowlist gate**
+(`loopguard check-allowlist`): it auto-merges into `base_ref` (a fast-forward —
+never a force-push) **only if** every file matches an allow glob, none match a
+deny glob, it's within the file/line caps, and it's integrity-clean. Anything
+else falls back to L2 behavior — propose a branch and escalate. It also refuses to
+move `base_ref` if that branch is checked out in the target. Default deny list
+covers `auth/`, `payments/`, `secrets/`, `migrations/`, CI workflows, and more.
+
+### Connectors (MCP) — reach out, but verify first
+
+`loopengine.connectors.GuardedConnector` wraps any MCP transport so **every tool
+return is run through the injection scanner before the loop can act on it**
+(verify-before-commit). Connectors are read-only by default; write tools require
+explicit, L3-only scope. The transport is injected, so there is no path to act on
+an unscanned result.
+
 ## Build phases — gate before advancing
 
 `L0` manual → **`L1` report-only** (`git-commit-triage`) → **`L2` assisted PRs**
-(`assisted-fix`: verifier + worktrees, propose-only) → `L3` unattended (tight
-allowlist). Default posture: **start at L1, stay until boring.**
+(`assisted-fix`: verifier + worktrees, propose-only) → **`L3` unattended**
+(`assisted-fix` + allowlist auto-merge). Default posture: **start at L1, stay
+until boring.**
 
 ## Develop & test
 
@@ -191,17 +211,16 @@ self-triage job.
 
 ## Status
 
-- ✅ Rust `loopguard`: guard + budget + verifier + diff-integrity + injection scanners —
-  **23 unit tests**, fmt + clippy clean.
+- ✅ Rust `loopguard`: guard + budget + verifier + diff-integrity + injection scanners +
+  **L3 allowlist policy gate** — **29 unit tests**, fmt + clippy clean.
 - ✅ Python `loopengine`: runtime, state, CLI, self-consistency, Reflexion, schema
-  validation, **worktree isolation**, the **L2 `assisted-fix` loop**, and a **Claude-backed
-  agent maker** — **24 tests**; end-to-end coverage of triage `found → clean`, fatal
-  escalation, the research features, assisted-fix (success-via-reflexion, reward-hack-caught,
-  cap-escalation, injection-blocked), and the LLM maker (fake-client, path-traversal refusal,
-  full loop to `proposed`).
+  validation, worktree isolation, the **`assisted-fix` loop (L2 propose / L3 auto-merge)**,
+  a **Claude-backed agent maker**, and **guarded MCP connectors** — **31 tests**; end-to-end
+  coverage of triage, escalation, the research features, assisted-fix, the LLM maker, L3
+  auto-merge (allowlisted / escalated), and connector injection-blocking.
 - ✅ JSON schema (per-kind conditional validation), example loops, dashboard, CI,
   [arXiv bibliography](docs/research-arxiv.md).
-- 🚧 Planned: richer dashboard; MCP connectors behind the injection gate; L3 unattended allowlist.
+- 🚧 Planned: richer dashboard + JSON HTTP API; a live MCP transport binding; multi-loop scheduler.
 
 ## License
 

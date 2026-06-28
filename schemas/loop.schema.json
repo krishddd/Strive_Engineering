@@ -35,6 +35,32 @@
         "model": { "type": "string", "description": "Claude model id; defaults to claude-opus-4-8." }
       }
     },
+    "allowlist": {
+      "type": "object",
+      "description": "L3 only: auto-merge gate. A verified change auto-merges into base_ref only if every file matches an allow glob, none match a deny glob, and it's within the size caps. Else it escalates (becomes a propose-only L2 result).",
+      "required": ["allow_globs", "max_files", "max_lines"],
+      "additionalProperties": false,
+      "properties": {
+        "allow_globs": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "deny_globs": { "type": "array", "items": { "type": "string" } },
+        "max_files": { "type": "integer", "minimum": 1 },
+        "max_lines": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "connectors": {
+      "type": "array",
+      "description": "Read-only MCP connectors. Every tool return is injection-scanned before the loop acts. Write scope is L3-only.",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "scope": { "type": "string", "enum": ["read", "write"], "default": "read" },
+          "write_tools": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
     "phase": {
       "type": "string",
       "enum": ["L0", "L1", "L2", "L3"],

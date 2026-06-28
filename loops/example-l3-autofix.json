@@ -1,0 +1,23 @@
+{
+  "id": "example-l3-autofix",
+  "kind": "assisted-fix",
+  "phase": "L3",
+  "state_file": ".loop-state/state.json",
+  "target": {
+    "repo": "/absolute/path/to/your/target/repo",
+    "base_ref": "main"
+  },
+  "task": "Fix the failing docs/changelog formatting check.",
+  "test_command": "python -m pytest -q",
+  "maker": { "type": "llm", "model": "claude-opus-4-8" },
+  "allowlist": {
+    "allow_globs": ["docs/**", "**/*.md", "CHANGELOG.md"],
+    "deny_globs": ["**/auth/**", "**/secrets/**", ".github/workflows/**"],
+    "max_files": 3,
+    "max_lines": 40
+  },
+  "connectors": [
+    { "name": "github", "scope": "read" }
+  ],
+  "budget": { "max_tokens": 200000, "max_iterations": 3, "wall_clock_secs": 600 }
+}

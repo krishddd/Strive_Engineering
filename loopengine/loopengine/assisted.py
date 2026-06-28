@@ -93,8 +93,9 @@ class AssistedFixLoop:
         )
 
     def run(self) -> AssistedResult:
-        if self.spec.get("phase") != "L2":
-            return self._finish(AssistedResult("error", note="assisted-fix requires phase L2"))
+        phase = self.spec.get("phase")
+        if phase not in ("L2", "L3"):
+            return self._finish(AssistedResult("error", note="assisted-fix requires phase L2 or L3"))
         if self.spec.get("paused"):
             return self._finish(AssistedResult("clean", note="paused"))
 
@@ -155,7 +156,11 @@ class AssistedFixLoop:
                 # 3. Ground-truth verifier: run the tests in the worktree.
                 code, output = wt.run(test_command)
                 if code == 0:
-                    commit = wt.commit(f"loop({self.loop_id}): {task}\n\nProposed by assisted-fix. Human review required.")
+                    commit = wt.commit(f"loop({self.loop_id}): {task}\n\nProposed by assisted-fix.")
+                    # 4. L3 only: if the change is in the auto-merge allowlist, merge it.
+                    if phase == "L3":
+                        return self._maybe_auto_merge(wt, target, base_ref, branch, commit, diff, attempt, reflections)
+                    # L2: leave the branch for a human to review and merge.
                     return self._finish(
                         AssistedResult(
                             "proposed", branch=branch, commit=commit, attempts=attempt,
@@ -183,6 +188,55 @@ class AssistedFixLoop:
                 wt, keep_branch=False,
             )
 
+    # -- L3 auto-merge ------------------------------------------------------
+
+    def _maybe_auto_merge(self, wt, target, base_ref, branch, commit, diff, attempt, reflections):
+        """L3: auto-merge the verified change iff it passes the allowlist gate;
+        otherwise escalate (leave the branch for review). Auto-merge is a
+        fast-forward of base_ref — never a force-push, never a history rewrite."""
+        policy = self.spec.get("allowlist")
+        if not policy:
+            return self._finish(
+                AssistedResult("escalated", branch=branch, commit=commit, attempts=attempt,
+                               note="L3 set but no allowlist policy — escalating",
+                               reflections=reflections),
+                wt, keep_branch=True,
+            )
+
+        decision = self.guard.check_allowlist(diff, policy)
+        if not decision.get("auto_ok"):
+            return self._finish(
+                AssistedResult("proposed", branch=branch, commit=commit, attempts=attempt,
+                               note=f"outside auto-merge allowlist: {decision.get('reasons')}",
+                               reflections=reflections),
+                wt, keep_branch=True,
+            )
+
+        # Safety: never auto-move base_ref if it's the target's checked-out branch.
+        try:
+            head_branch = wt._git("symbolic-ref", "--short", "HEAD").strip()
+        except Exception:  # noqa: BLE001 — detached HEAD etc.
+            head_branch = ""
+        if head_branch == base_ref:
+            return self._finish(
+                AssistedResult("proposed", branch=branch, commit=commit, attempts=attempt,
+                               note=f"{base_ref} is checked out in the target — refusing auto-merge",
+                               reflections=reflections),
+                wt, keep_branch=True,
+            )
+
+        # Fast-forward base_ref to the verified commit (guarded against races by
+        # supplying the expected old value). The worktree branch is then redundant.
+        old_base = resolve(target, base_ref)
+        wt._git("update-ref", f"refs/heads/{base_ref}", commit, old_base)
+        return self._finish(
+            AssistedResult("merged", branch=base_ref, commit=commit, attempts=attempt,
+                           note=f"auto-merged into {base_ref} (allowlist: {decision['files_changed']} files, "
+                                f"{decision['lines_changed']} lines)",
+                           reflections=reflections),
+            wt, keep_branch=False,
+        )
+
     # -- helpers ------------------------------------------------------------
 
     def _invoke_maker(self, wt: Worktree, maker_command: str | None, task: str, reflections: list[str]) -> None:
@@ -205,7 +259,7 @@ class AssistedFixLoop:
         self.state.write_section(
             self.loop_id,
             {
-                "phase": "L2",
+                "phase": self.spec.get("phase", "L2"),
                 "last_run": ts,
                 "last_result": res.result,
                 "branch": res.branch,
@@ -215,10 +269,13 @@ class AssistedFixLoop:
                 "note": res.note,
             },
         )
+        action = {
+            "merged": "auto-merged",
+            "proposed": "opened-branch",
+        }.get(res.result, "escalated-to-human")
         self.state.append_runlog(
             {
-                "ts": ts, "loop": self.loop_id, "result": res.result,
-                "action": "opened-branch" if res.result == "proposed" else "escalated-to-human",
+                "ts": ts, "loop": self.loop_id, "result": res.result, "action": action,
                 "branch": res.branch, "attempts": res.attempts, "note": res.note,
             }
         )

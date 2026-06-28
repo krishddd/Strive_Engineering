@@ -28,6 +28,7 @@ EXIT_FABRICATED = 3
 EXIT_UNVERIFIABLE = 4
 EXIT_TAMPERED = 5
 EXIT_INJECTION = 6
+EXIT_ESCALATE = 7
 
 
 def _candidate_paths() -> list[Path]:
@@ -118,6 +119,30 @@ class Loopguard:
             check=False,
         )
         return json.loads(proc.stdout or '{"severity":"none","signals":[]}')
+
+    def check_allowlist(self, diff_text: str, policy: dict) -> dict:
+        """L3 gate: is this diff safe to auto-merge under ``policy``?
+
+        Returns ``{"auto_ok": bool, "files_changed": int, "lines_changed": int,
+        "reasons": [...]}``. Writes the policy to a temp file because the CLI reads
+        it from a path. ``auto_ok`` is True only when every gate passes.
+        """
+        import tempfile
+
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as fh:
+            json.dump(policy, fh)
+            policy_path = fh.name
+        try:
+            proc = subprocess.run(
+                [self.binary, "check-allowlist", policy_path, "-"],
+                input=diff_text,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        finally:
+            Path(policy_path).unlink(missing_ok=True)
+        return json.loads(proc.stdout or '{"auto_ok":false,"reasons":["no output"]}')
 
     def verify_shas(self, repo: str, shas: Sequence[str]) -> dict:
         """Grounded verification: do these commit SHAs resolve in ``repo``?

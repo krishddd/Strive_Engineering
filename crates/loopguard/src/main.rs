@@ -6,11 +6,13 @@
 //!   loopguard budget [--max-tokens N] ... -> normalized budget JSON
 //!   loopguard scan-diff [file|-]          -> integrity report JSON; exit 5 if tampering
 //!   loopguard scan-injection [file|-]     -> injection report JSON; exit 6 if high severity
+//!   loopguard check-allowlist <policy> [diff|-] -> policy decision JSON; exit 7 if escalate
 //!
 //! Stable exit codes (a contract with the Python runtime):
-//!   0 = ok/allow/clean, 2 = command blocked, 3 = a claim was fabricated,
+//!   0 = ok/allow/clean/auto-ok, 2 = command blocked, 3 = a claim was fabricated,
 //!   4 = verifier could not run (escalate), 5 = diff tampers with the verifier,
-//!   6 = high-severity prompt injection in untrusted text.
+//!   6 = high-severity prompt injection in untrusted text,
+//!   7 = change is not auto-mergeable under the L3 allowlist (escalate to human).
 //!
 //! Arg parsing is hand-rolled deliberately: it keeps the dependency graph to
 //! pure-Rust crates so the binary links cleanly under the self-contained
@@ -87,6 +89,24 @@ fn main() {
             println!("{}", serde_json::to_string(&report).unwrap());
             if report.severity >= loopguard::Severity::High {
                 std::process::exit(6);
+            }
+        }
+        "check-allowlist" => {
+            let policy_path = args.get(1).unwrap_or_else(|| usage());
+            let policy_json = std::fs::read_to_string(policy_path).unwrap_or_else(|e| {
+                eprintln!("cannot read policy {policy_path}: {e}");
+                std::process::exit(64);
+            });
+            let policy: loopguard::AllowPolicy =
+                serde_json::from_str(&policy_json).unwrap_or_else(|e| {
+                    eprintln!("invalid policy JSON: {e}");
+                    std::process::exit(64);
+                });
+            let diff = read_input(args.get(2).map(String::as_str));
+            let decision = loopguard::evaluate_policy(&diff, &policy);
+            println!("{}", serde_json::to_string(&decision).unwrap());
+            if !decision.auto_ok {
+                std::process::exit(7);
             }
         }
         "-h" | "--help" | "help" => usage(),
