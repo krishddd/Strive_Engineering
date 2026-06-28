@@ -77,6 +77,48 @@ class GuardedConnector:
         return result
 
 
+class HttpMCPTransport:
+    """A live MCP transport speaking JSON-RPC 2.0 ``tools/call`` over HTTP (the MCP
+    Streamable-HTTP transport). stdlib-only; the POST is isolated in ``post`` so the
+    transport is testable without a server. Conforms to ``MCPTransport``."""
+
+    def __init__(self, url: str, headers: dict[str, str] | None = None, post=None) -> None:
+        self.url = url
+        self.headers = headers or {}
+        self._post = post or self._http_post
+        self._id = 0
+
+    def call(self, tool: str, args: dict[str, Any]) -> str:
+        self._id += 1
+        request = {
+            "jsonrpc": "2.0",
+            "id": self._id,
+            "method": "tools/call",
+            "params": {"name": tool, "arguments": args},
+        }
+        resp = self._post(request)
+        if "error" in resp:
+            raise ConnectorError(f"MCP error from {self.url}: {resp['error']}")
+        result = resp.get("result", {})
+        if result.get("isError"):
+            raise ConnectorError(f"MCP tool {tool} reported an error: {result.get('content')}")
+        texts = [c.get("text", "") for c in result.get("content", []) if c.get("type") == "text"]
+        return "\n".join(texts)
+
+    def _http_post(self, request: dict) -> dict:
+        import json
+        import urllib.request
+
+        req = urllib.request.Request(
+            self.url,
+            data=json.dumps(request).encode("utf-8"),
+            headers={**self.headers, "Content-Type": "application/json", "Accept": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=60) as r:  # noqa: S310 — caller-supplied MCP URL
+            return json.loads(r.read().decode("utf-8"))
+
+
 def build_connector(cfg: dict, transport: MCPTransport, guard: Loopguard | None = None) -> GuardedConnector:
     """Build a GuardedConnector from a spec connector config + an injected transport.
 

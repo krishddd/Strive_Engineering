@@ -8,8 +8,9 @@ budget brakes, grounded verification) to the Rust ``loopguard`` core.
 
 from .assisted import AssistedFixLoop, AssistedResult, ScriptMaker
 from .budget import Budget, BudgetExceeded
-from .connectors import ConnectorError, GuardedConnector, build_connector
+from .connectors import ConnectorError, GuardedConnector, HttpMCPTransport, build_connector
 from .consistency import ConsensusResult, majority_vote
+from .scheduler import Scheduler, TickSummary, parse_interval
 from .core import Loopguard, LoopguardUnavailable
 from .makers import AnthropicClient, LLMMaker, OpenAICompatibleClient, make_maker
 from .reflexion import Critique, ReflexionResult, run_reflexion
@@ -24,7 +25,11 @@ __all__ = [
     "ScriptMaker",
     "ConnectorError",
     "GuardedConnector",
+    "HttpMCPTransport",
     "build_connector",
+    "Scheduler",
+    "TickSummary",
+    "parse_interval",
     "Budget",
     "BudgetExceeded",
     "ConsensusResult",

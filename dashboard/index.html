@@ -31,6 +31,7 @@
   </header>
   <main>
     <div class="row">
+      <button id="live" type="button">Load live (/api/state)</button>
       <input id="file" type="file" accept="application/json" />
       <span class="muted">or drop <code>.loop-state/state.json</code> here</span>
     </div>
@@ -67,6 +68,13 @@
         </div>`;
       }).join('');
     }
+
+    document.getElementById('live').addEventListener('click', () => {
+      fetch('/api/state')
+        .then(r => r.json())
+        .then(render)
+        .catch(() => { out.innerHTML = '<p class="error">Could not reach /api/state — run <code>loopengine serve</code> first.</p>'; });
+    });
 
     document.getElementById('file').addEventListener('change', e => {
       const f = e.target.files[0]; if (!f) return;

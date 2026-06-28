@@ -100,10 +100,10 @@ annotated bibliography in [`docs/research-arxiv.md`](docs/research-arxiv.md):
 
 | Primitive | In this repo |
 |---|---|
-| Automations / scheduling | loop `cadence` + the runtime's single-pass trigger |
+| Automations / scheduling | `loopengine.scheduler` — multi-loop ticks: cadence, priority, triage-inbox, collision guard |
 | Worktrees (isolation) | `loopengine.worktree` — every assisted-fix attempt runs in an isolated worktree |
 | Skills (codified knowledge) | loop specs + `docs/` patterns |
-| Connectors (MCP) | `loopengine.connectors` — every tool return is injection-scanned before the loop acts (read-only by default) |
+| Connectors (MCP) | `loopengine.connectors` — live JSON-RPC `HttpMCPTransport`; every tool return is injection-scanned before the loop acts (read-only by default) |
 | Sub-agents (maker/checker) | the **assisted-fix** loop: maker proposes, checker (integrity + tests) verifies |
 | Memory / external state | `loopengine.state` — JSON state + JSONL run log |
 
@@ -129,8 +129,16 @@ loopengine run loops/local-mine.json
 loopengine show .loop-state/state.json example-triage
 ```
 
-Open [`dashboard/index.html`](dashboard/index.html) in a browser and drop your
-`.loop-state/state.json` onto it to see findings and run history.
+```bash
+# 5. Run every due loop in a directory once (cadence + priority + triage-inbox)
+loopengine schedule loops/ --state .loop-state/state.json
+
+# 6. Serve the read-only dashboard + JSON API (GET /api/state, /api/runlog)
+loopengine serve --state .loop-state/state.json --port 8765
+```
+
+Open the dashboard at `http://127.0.0.1:8765` and click **Load live**, or open
+[`dashboard/index.html`](dashboard/index.html) directly and drop a `state.json` onto it.
 
 ## Project layout
 
@@ -239,13 +247,15 @@ self-triage job.
 - ✅ Rust `loopguard`: guard + budget + verifier + diff-integrity + injection scanners +
   **L3 allowlist policy gate** — **29 unit tests**, fmt + clippy clean.
 - ✅ Python `loopengine`: runtime, state, CLI, self-consistency, Reflexion, schema
-  validation, worktree isolation, the **`assisted-fix` loop (L2 propose / L3 auto-merge)**,
-  a **Claude-backed agent maker**, and **guarded MCP connectors** — **31 tests**; end-to-end
-  coverage of triage, escalation, the research features, assisted-fix, the LLM maker, L3
-  auto-merge (allowlisted / escalated), and connector injection-blocking.
+  validation, worktree isolation, `assisted-fix` (L2 propose / L3 auto-merge), a
+  **provider-agnostic agent maker** (Claude + free NVIDIA NIM / any OpenAI-compatible),
+  **guarded MCP connectors with a live JSON-RPC transport**, a **multi-loop scheduler**
+  (cadence + priority + triage-inbox + collision guard), and a **read-only dashboard JSON
+  API** — **46 tests**; all deterministic (injected clock / runner / transport — no sockets).
 - ✅ JSON schema (per-kind conditional validation), example loops, dashboard, CI,
   [arXiv bibliography](docs/research-arxiv.md).
-- 🚧 Planned: richer dashboard + JSON HTTP API; a live MCP transport binding; multi-loop scheduler.
+- ✅ **Full L0→L3 ladder shipped** + scheduling, connectors, and observability. Optional next:
+  packaging the CLIs for distribution; more loop kinds.
 
 ## License
 

@@ -88,6 +88,42 @@ def cmd_scan_injection(args: argparse.Namespace) -> int:
     return 6 if report.get("severity") == "high" else 0
 
 
+def cmd_schedule(args: argparse.Namespace) -> int:
+    import datetime as _dt
+
+    from .scheduler import Scheduler
+
+    paths = sorted(Path(args.dir).glob("*.json")) if Path(args.dir).is_dir() else [Path(args.dir)]
+    specs = []
+    for p in paths:
+        spec = _load_spec(str(p))
+        try:
+            validate_spec(spec)
+        except SpecInvalid as e:
+            print(f"skipping {p.name}: {e}", file=sys.stderr)
+            continue
+        specs.append(spec)
+    if not specs:
+        print("no valid loop specs found", file=sys.stderr)
+        return 1
+    state = StateStore(args.state)
+    now = args.now or _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    summary = Scheduler(state).run_once(specs, now)
+    for it in summary.items:
+        mark = "•" if it.ran else "-"
+        bell = " 🔔" if it.notify else ""
+        print(f"  {mark} {it.loop_id}: {it.result or it.reason}{bell}")
+    print(f"[tick {now}] {len(summary.notifications)} notification(s)")
+    return 0
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    from .dashboard_api import serve
+
+    serve(args.state, port=args.port)
+    return 0
+
+
 def cmd_show(args: argparse.Namespace) -> int:
     section = StateStore(args.state).read_section(args.loop_id)
     print(json.dumps(section, indent=2))
@@ -124,6 +160,17 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("state")
     ps.add_argument("loop_id")
     ps.set_defaults(func=cmd_show)
+
+    psc = sub.add_parser("schedule", help="run all due loops in a directory once (one tick)")
+    psc.add_argument("dir", help="directory of loop spec JSONs (or a single spec file)")
+    psc.add_argument("--state", default=".loop-state/state.json")
+    psc.add_argument("--now", help="ISO8601 UTC override (default: now)")
+    psc.set_defaults(func=cmd_schedule)
+
+    psv = sub.add_parser("serve", help="serve the read-only dashboard + JSON API")
+    psv.add_argument("--state", default=".loop-state/state.json")
+    psv.add_argument("--port", type=int, default=8765)
+    psv.set_defaults(func=cmd_serve)
 
     return p
 
