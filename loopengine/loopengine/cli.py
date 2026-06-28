@@ -27,6 +27,17 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 64
     state = StateStore(args.state or spec.get("state_file", ".loop-state/state.json"))
     try:
+        if spec.get("kind") == "assisted-fix":
+            from .assisted import AssistedFixLoop
+
+            res = AssistedFixLoop(spec, state).run()
+            print(f"[{res.result}] {spec['id']}: {res.attempts} attempt(s) — {res.note}")
+            if res.branch:
+                print(f"  branch for review: {res.branch} @ {res.commit}")
+            for r in res.reflections:
+                print(f"  reflection: {r}")
+            return 0 if res.result == "proposed" else 1
+
         runtime = LoopRuntime(spec, state)
     except LoopguardUnavailable as e:
         print(f"error: {e}", file=sys.stderr)

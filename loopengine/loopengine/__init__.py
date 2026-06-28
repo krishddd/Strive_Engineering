@@ -6,6 +6,7 @@ infrastructure, and delegates the constraint-critical pieces (command guard,
 budget brakes, grounded verification) to the Rust ``loopguard`` core.
 """
 
+from .assisted import AssistedFixLoop, AssistedResult, ScriptMaker
 from .budget import Budget, BudgetExceeded
 from .consistency import ConsensusResult, majority_vote
 from .core import Loopguard, LoopguardUnavailable
@@ -13,8 +14,12 @@ from .reflexion import Critique, ReflexionResult, run_reflexion
 from .state import StateStore
 from .validate import SpecInvalid, validate_spec
 from .verifier import VerificationError, Verifier
+from .worktree import Worktree, WorktreeError
 
 __all__ = [
+    "AssistedFixLoop",
+    "AssistedResult",
+    "ScriptMaker",
     "Budget",
     "BudgetExceeded",
     "ConsensusResult",
@@ -29,6 +34,8 @@ __all__ = [
     "validate_spec",
     "Verifier",
     "VerificationError",
+    "Worktree",
+    "WorktreeError",
 ]
 
 __version__ = "0.1.0"

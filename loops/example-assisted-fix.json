@@ -1,0 +1,18 @@
+{
+  "id": "example-assisted-fix",
+  "kind": "assisted-fix",
+  "phase": "L2",
+  "state_file": ".loop-state/state.json",
+  "target": {
+    "repo": "/absolute/path/to/your/target/repo",
+    "base_ref": "main"
+  },
+  "task": "Fix the failing unit test in the parser module.",
+  "test_command": "python -m pytest -q",
+  "maker_command": "echo 'wire your agent/codegen step here to edit files in the worktree'",
+  "budget": {
+    "max_tokens": 200000,
+    "max_iterations": 3,
+    "wall_clock_secs": 600
+  }
+}

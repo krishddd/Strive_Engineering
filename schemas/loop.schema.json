@@ -10,8 +10,20 @@
     "id": { "type": "string", "description": "Unique loop id; keys its state section." },
     "kind": {
       "type": "string",
-      "enum": ["git-commit-triage"],
-      "description": "Loop type. git-commit-triage: read-only triage of recent commits."
+      "enum": ["git-commit-triage", "assisted-fix"],
+      "description": "Loop type. git-commit-triage: read-only triage (L1). assisted-fix: propose a verified change on a branch in an isolated worktree (L2, no auto-merge)."
+    },
+    "task": {
+      "type": "string",
+      "description": "assisted-fix only: the change to make, in plain language."
+    },
+    "test_command": {
+      "type": "string",
+      "description": "assisted-fix only: ground-truth verifier run in the worktree (exit 0 = pass)."
+    },
+    "maker_command": {
+      "type": "string",
+      "description": "assisted-fix only: shell command run in the worktree to produce the change (the agent-step placeholder). Omitted when a maker callable is supplied programmatically."
     },
     "phase": {
       "type": "string",
@@ -26,20 +38,24 @@
     "state_file": { "type": "string", "description": "Path to the JSON state file." },
     "target": {
       "type": "object",
-      "required": ["repo", "refs"],
+      "required": ["repo"],
       "additionalProperties": false,
       "properties": {
-        "repo": { "type": "string", "description": "Absolute path to the read-only target git repo." },
+        "repo": { "type": "string", "description": "Absolute path to the target git repo." },
         "refs": {
           "type": "array",
           "items": { "type": "string" },
-          "minItems": 1,
-          "description": "Branches/refs to watch. If 2+, ahead/behind divergence is reported."
+          "description": "git-commit-triage: branches/refs to watch. If 2+, ahead/behind divergence is reported."
         },
         "first_run_since": {
           "type": "string",
           "default": "7 days ago",
-          "description": "Lookback window for the first run (no cursor yet)."
+          "description": "Lookback window for the first triage run (no cursor yet)."
+        },
+        "base_ref": {
+          "type": "string",
+          "default": "main",
+          "description": "assisted-fix: ref to branch the worktree off."
         }
       }
     },
@@ -53,5 +69,15 @@
         "wall_clock_secs": { "type": "integer", "minimum": 1 }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "git-commit-triage" } } },
+      "then": { "properties": { "target": { "required": ["refs"] } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "assisted-fix" } } },
+      "then": { "required": ["task", "test_command"] }
+    }
+  ]
 }

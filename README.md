@@ -101,10 +101,10 @@ annotated bibliography in [`docs/research-arxiv.md`](docs/research-arxiv.md):
 | Primitive | In this repo |
 |---|---|
 | Automations / scheduling | loop `cadence` + the runtime's single-pass trigger |
-| Worktrees (isolation) | planned L2 adapter for the maker/checker split |
+| Worktrees (isolation) | `loopengine.worktree` — every assisted-fix attempt runs in an isolated worktree |
 | Skills (codified knowledge) | loop specs + `docs/` patterns |
 | Connectors (MCP) | none yet — read-only `git` only, zero write scope |
-| Sub-agents (maker/checker) | the runtime's verify step; adversarial checker specced for L2 |
+| Sub-agents (maker/checker) | the **assisted-fix** loop: maker proposes, checker (integrity + tests) verifies |
 | Memory / external state | `loopengine.state` — JSON state + JSONL run log |
 
 ## Quick start
@@ -145,11 +145,29 @@ Strive_Engineering/
 └── .github/workflows/     # CI: fmt + clippy + cargo test + pytest
 ```
 
+## The assisted-fix loop (L2)
+
+`assisted-fix` is the maker/checker loop, end to end:
+
+```
+worktree off base_ref → maker proposes an edit → checker gates it:
+   1. integrity scan of the diff   (deleted test / weakened assertion → ESCALATE, no retry)
+   2. injection scan of the task   (prompt injection in the brief → ESCALATE)
+   3. run test_command in worktree  (the ground-truth verifier)
+→ on test failure: Reflexion feeds the reason into the next attempt (bounded by the cap)
+→ on success: commit to a branch and leave it for a human — it never auto-merges
+```
+
+The maker is pluggable: inject a Python callable, or set `maker_command` in the
+spec (the placeholder where you wire an agent/codegen step). Blast radius is a
+throwaway branch in an isolated worktree; `main` is never touched. See
+[`loops/example-assisted-fix.json`](loops/example-assisted-fix.json).
+
 ## Build phases — gate before advancing
 
-`L0` manual → **`L1` report-only** → `L2` assisted PRs (verifier + worktrees) →
-`L3` unattended (tight allowlist). Default posture: **start at L1, stay until
-boring.** The runtime ships at L1: read-only, single-pass, report-only.
+`L0` manual → **`L1` report-only** (`git-commit-triage`) → **`L2` assisted PRs**
+(`assisted-fix`: verifier + worktrees, propose-only) → `L3` unattended (tight
+allowlist). Default posture: **start at L1, stay until boring.**
 
 ## Develop & test
 
@@ -166,12 +184,14 @@ self-triage job.
 
 - ✅ Rust `loopguard`: guard + budget + verifier + diff-integrity + injection scanners —
   **23 unit tests**, fmt + clippy clean.
-- ✅ Python `loopengine`: runtime, state, CLI, `git-commit-triage`, self-consistency,
-  Reflexion controller, schema validation — **16 tests**; end-to-end `found → clean`,
-  fatal-escalation, and the research features covered.
-- ✅ JSON schema, example loop, dashboard viewer, CI, [arXiv bibliography](docs/research-arxiv.md).
-- 🚧 Planned: wire the Reflexion/maker-checker loop kind into the runtime end-to-end with
-  worktree isolation (L2); richer dashboard; MCP connectors with the injection gate.
+- ✅ Python `loopengine`: runtime, state, CLI, self-consistency, Reflexion, schema
+  validation, **worktree isolation**, and the **L2 `assisted-fix` loop** — **20 tests**;
+  end-to-end coverage of triage `found → clean`, fatal escalation, the research features,
+  and assisted-fix (success-via-reflexion, reward-hack-caught, cap-escalation, injection-blocked).
+- ✅ JSON schema (per-kind conditional validation), example loops, dashboard, CI,
+  [arXiv bibliography](docs/research-arxiv.md).
+- 🚧 Planned: wire a real agent maker into `assisted-fix`; richer dashboard; MCP connectors
+  behind the injection gate; L3 allowlist.
 
 ## License
 
