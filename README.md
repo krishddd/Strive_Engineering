@@ -67,8 +67,8 @@ binary) — no FFI or maturin build step.
 
 | Component | Language | Owns |
 |---|---|---|
-| [`crates/loopguard`](crates/loopguard) | **Rust** | Deterministic **command guard** (denylist), hard **budget / iteration / wall-clock brakes**, and **grounded verification** (commit-SHA existence — ungameable). Library + JSON CLI. |
-| [`loopengine/`](loopengine) | **Python** | The **runtime**: trigger → gather → verify → state → escalate; external JSON state + run log; CLI. |
+| [`crates/loopguard`](crates/loopguard) | **Rust** | Deterministic **command guard** (denylist), hard **budget / iteration / wall-clock brakes**, **grounded verification** (commit-SHA existence), a **reward-hacking / diff-integrity scanner**, and a **prompt-injection scanner**. Library + JSON CLI. |
+| [`loopengine/`](loopengine) | **Python** | The **runtime**: trigger → gather → verify → state → escalate; **self-consistency voting**, **Reflexion-style retry**, JSON-schema-validated specs, external state + run log; CLI. |
 | [`schemas/`](schemas) | **JSON Schema** | The `loop.json` contract every loop is validated against. |
 | [`dashboard/`](dashboard) | **HTML/JS** | Read-only observability: state, findings, run log, budget. |
 
@@ -83,6 +83,18 @@ Here, every reported finding cites a commit SHA, and `loopguard` confirms each o
 resolves in the target repo (`git cat-file -e`). A SHA either exists or it doesn't —
 there is nothing to talk past. A finding with an unresolvable SHA makes the **whole
 run invalid**, not merely flagged. See [docs/](docs/) for the full critique.
+
+### Hardened against the ways loops actually cheat (research-driven)
+
+The defences below each implement a specific result from the literature — full
+annotated bibliography in [`docs/research-arxiv.md`](docs/research-arxiv.md):
+
+| Threat | Defence | Source |
+|---|---|---|
+| Agent passes a check by **deleting the test / weakening the assertion / editing the eval harness** | `loopguard scan-diff` flags removed tests, added skip markers, removed assertions, and edits to test/eval/CI files → auto-escalate | Reward Hacking Benchmark (2605.02964); RLVR verifier gaming (2604.15149) |
+| **Indirect prompt injection** via ingested tool returns | `loopguard scan-injection` scores instruction-override / role-spoof / exfiltration before the loop acts (verify-before-commit) | Task Shield (2412.16682); IPIGuard (2508.15310); VIGIL (2601.05755) |
+| **LLM-judge is inconsistent / self-preferring** | never let the maker grade itself; `majority_vote` requires consensus across N independent verdicts and escalates on disagreement | Rating Roulette (2510.27106); Reliability without Validity (2606.19544) |
+| **Blind retry oscillates** | `run_reflexion` feeds the checker's reason-for-failure into the next attempt, bounded by the iteration cap | Reflexion (2303.11366); Self-Refine (2303.17651) |
 
 ## The six primitives → where they live
 
@@ -108,6 +120,8 @@ pip install -e "loopengine[dev]"
 loopengine guard "git push --force origin main"   # → BLOCK (exit 2)
 loopengine guard "git log -5"                      # → allow
 loopengine verify /path/to/repo <real-sha> <fake>  # → grounded vs fabricated
+git diff | loopengine scan-diff -                   # → flags test-deletion (exit 5)
+loopengine scan-injection suspicious.txt            # → flags prompt injection (exit 6)
 
 # 4. Run a loop (report-only). Copy the example, point it at a real repo:
 cp loops/example-triage.json loops/local-mine.json   # edit target.repo
@@ -150,11 +164,14 @@ self-triage job.
 
 ## Status
 
-- ✅ Rust `loopguard`: guard + budget + verifier — 13 unit tests, fmt + clippy clean.
-- ✅ Python `loopengine`: runtime, state, CLI, `git-commit-triage` — 5 tests; end-to-end
-  `found → clean` and fatal-escalation covered.
-- ✅ JSON schema, example loop, dashboard viewer, CI.
-- 🚧 Planned: L2 maker/checker + worktree isolation; richer dashboard; MCP connectors.
+- ✅ Rust `loopguard`: guard + budget + verifier + diff-integrity + injection scanners —
+  **23 unit tests**, fmt + clippy clean.
+- ✅ Python `loopengine`: runtime, state, CLI, `git-commit-triage`, self-consistency,
+  Reflexion controller, schema validation — **16 tests**; end-to-end `found → clean`,
+  fatal-escalation, and the research features covered.
+- ✅ JSON schema, example loop, dashboard viewer, CI, [arXiv bibliography](docs/research-arxiv.md).
+- 🚧 Planned: wire the Reflexion/maker-checker loop kind into the runtime end-to-end with
+  worktree isolation (L2); richer dashboard; MCP connectors with the injection gate.
 
 ## License
 

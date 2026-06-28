@@ -26,6 +26,8 @@ EXIT_OK = 0
 EXIT_BLOCKED = 2
 EXIT_FABRICATED = 3
 EXIT_UNVERIFIABLE = 4
+EXIT_TAMPERED = 5
+EXIT_INJECTION = 6
 
 
 def _candidate_paths() -> list[Path]:
@@ -87,6 +89,35 @@ class Loopguard:
         if data.get("decision") == "block":
             return GuardDecision(False, data.get("rule"), data.get("reason"))
         return GuardDecision(True, None, None)
+
+    def scan_diff(self, diff_text: str) -> dict:
+        """Scan a unified diff for verifier-tampering (reward-hacking) moves.
+
+        Returns ``{"clean": bool, "findings": [...]}``. The runtime escalates a
+        proposed L2 change whenever ``clean`` is False.
+        """
+        proc = subprocess.run(
+            [self.binary, "scan-diff", "-"],
+            input=diff_text,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return json.loads(proc.stdout or '{"clean":true,"findings":[]}')
+
+    def scan_injection(self, text: str) -> dict:
+        """Scan untrusted tool-return text for prompt-injection signatures.
+
+        Returns ``{"severity": "none|low|medium|high", "signals": [...]}``.
+        """
+        proc = subprocess.run(
+            [self.binary, "scan-injection", "-"],
+            input=text,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return json.loads(proc.stdout or '{"severity":"none","signals":[]}')
 
     def verify_shas(self, repo: str, shas: Sequence[str]) -> dict:
         """Grounded verification: do these commit SHAs resolve in ``repo``?

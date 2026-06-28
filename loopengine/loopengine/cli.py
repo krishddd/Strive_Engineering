@@ -10,6 +10,7 @@ from pathlib import Path
 from .core import Loopguard, LoopguardUnavailable
 from .runtime import LoopRuntime
 from .state import StateStore
+from .validate import SpecInvalid, validate_spec
 from .verifier import VerificationError, Verifier
 
 
@@ -19,6 +20,11 @@ def _load_spec(path: str) -> dict:
 
 def cmd_run(args: argparse.Namespace) -> int:
     spec = _load_spec(args.spec)
+    try:
+        validate_spec(spec)
+    except SpecInvalid as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 64
     state = StateStore(args.state or spec.get("state_file", ".loop-state/state.json"))
     try:
         runtime = LoopRuntime(spec, state)
@@ -55,6 +61,20 @@ def cmd_verify(args: argparse.Namespace) -> int:
     return 0 if r.valid else 3
 
 
+def cmd_scan_diff(args: argparse.Namespace) -> int:
+    text = Path(args.file).read_text(encoding="utf-8") if args.file != "-" else sys.stdin.read()
+    report = Loopguard().scan_diff(text)
+    print(json.dumps(report, indent=2))
+    return 0 if report.get("clean") else 5
+
+
+def cmd_scan_injection(args: argparse.Namespace) -> int:
+    text = Path(args.file).read_text(encoding="utf-8") if args.file != "-" else sys.stdin.read()
+    report = Loopguard().scan_injection(text)
+    print(json.dumps(report, indent=2))
+    return 6 if report.get("severity") == "high" else 0
+
+
 def cmd_show(args: argparse.Namespace) -> int:
     section = StateStore(args.state).read_section(args.loop_id)
     print(json.dumps(section, indent=2))
@@ -78,6 +98,14 @@ def build_parser() -> argparse.ArgumentParser:
     pv.add_argument("repo")
     pv.add_argument("shas", nargs="+")
     pv.set_defaults(func=cmd_verify)
+
+    pd = sub.add_parser("scan-diff", help="flag verifier-tampering moves in a unified diff")
+    pd.add_argument("file", nargs="?", default="-", help="diff file, or - for stdin")
+    pd.set_defaults(func=cmd_scan_diff)
+
+    pi = sub.add_parser("scan-injection", help="scan untrusted text for prompt injection")
+    pi.add_argument("file", nargs="?", default="-", help="text file, or - for stdin")
+    pi.set_defaults(func=cmd_scan_injection)
 
     ps = sub.add_parser("show", help="print a loop's current state section")
     ps.add_argument("state")

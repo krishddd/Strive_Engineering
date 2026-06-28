@@ -7,16 +7,26 @@ budget brakes, grounded verification) to the Rust ``loopguard`` core.
 """
 
 from .budget import Budget, BudgetExceeded
+from .consistency import ConsensusResult, majority_vote
 from .core import Loopguard, LoopguardUnavailable
+from .reflexion import Critique, ReflexionResult, run_reflexion
 from .state import StateStore
+from .validate import SpecInvalid, validate_spec
 from .verifier import VerificationError, Verifier
 
 __all__ = [
     "Budget",
     "BudgetExceeded",
+    "ConsensusResult",
+    "majority_vote",
     "Loopguard",
     "LoopguardUnavailable",
+    "Critique",
+    "ReflexionResult",
+    "run_reflexion",
     "StateStore",
+    "SpecInvalid",
+    "validate_spec",
     "Verifier",
     "VerificationError",
 ]

@@ -4,10 +4,13 @@
 //!   loopguard check-command "<cmd>"       -> {"decision":"allow"|"block",...}; exit 2 on block
 //!   loopguard verify-sha <repo> <sha>...  -> batch verdict JSON; exit 3/4 on failure
 //!   loopguard budget [--max-tokens N] ... -> normalized budget JSON
+//!   loopguard scan-diff [file|-]          -> integrity report JSON; exit 5 if tampering
+//!   loopguard scan-injection [file|-]     -> injection report JSON; exit 6 if high severity
 //!
 //! Stable exit codes (a contract with the Python runtime):
-//!   0 = ok/allow/all-grounded, 2 = command blocked, 3 = a claim was fabricated,
-//!   4 = verifier could not run (escalate).
+//!   0 = ok/allow/clean, 2 = command blocked, 3 = a claim was fabricated,
+//!   4 = verifier could not run (escalate), 5 = diff tampers with the verifier,
+//!   6 = high-severity prompt injection in untrusted text.
 //!
 //! Arg parsing is hand-rolled deliberately: it keeps the dependency graph to
 //! pure-Rust crates so the binary links cleanly under the self-contained
@@ -70,7 +73,39 @@ fn main() {
             let b = Budget::new(max_tokens, max_iterations, wall_clock_secs);
             println!("{}", serde_json::to_string(&b).unwrap());
         }
+        "scan-diff" => {
+            let text = read_input(args.get(1).map(String::as_str));
+            let report = loopguard::scan_diff(&text);
+            println!("{}", serde_json::to_string(&report).unwrap());
+            if !report.clean {
+                std::process::exit(5);
+            }
+        }
+        "scan-injection" => {
+            let text = read_input(args.get(1).map(String::as_str));
+            let report = loopguard::scan_injection(&text);
+            println!("{}", serde_json::to_string(&report).unwrap());
+            if report.severity >= loopguard::Severity::High {
+                std::process::exit(6);
+            }
+        }
         "-h" | "--help" | "help" => usage(),
         _ => usage(),
+    }
+}
+
+/// Read scan input from a file path, or from stdin when the arg is "-" or absent.
+fn read_input(arg: Option<&str>) -> String {
+    use std::io::Read;
+    match arg {
+        Some(path) if path != "-" => std::fs::read_to_string(path).unwrap_or_else(|e| {
+            eprintln!("cannot read {path}: {e}");
+            std::process::exit(64);
+        }),
+        _ => {
+            let mut buf = String::new();
+            std::io::stdin().read_to_string(&mut buf).ok();
+            buf
+        }
     }
 }
