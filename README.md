@@ -12,7 +12,8 @@ and the orchestration in **Python**.
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![rust](https://img.shields.io/badge/rust-loopguard-orange?logo=rust)
 ![python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
-![phase](https://img.shields.io/badge/phase-L1%20report--only-23863633)
+![phase](https://img.shields.io/badge/phases-L0%E2%86%92L3-3ee8c5)
+![tests](https://img.shields.io/badge/tests-75%20passing-brightgreen)
 ![status](https://img.shields.io/badge/status-active-brightgreen)
 
 </div>
@@ -67,10 +68,10 @@ binary) — no FFI or maturin build step.
 
 | Component | Language | Owns |
 |---|---|---|
-| [`crates/loopguard`](crates/loopguard) | **Rust** | Deterministic **command guard** (denylist), hard **budget / iteration / wall-clock brakes**, **grounded verification** (commit-SHA existence), a **reward-hacking / diff-integrity scanner**, and a **prompt-injection scanner**. Library + JSON CLI. |
-| [`loopengine/`](loopengine) | **Python** | The **runtime**: trigger → gather → verify → state → escalate; **self-consistency voting**, **Reflexion-style retry**, JSON-schema-validated specs, external state + run log; CLI. |
+| [`crates/loopguard`](crates/loopguard) | **Rust** | Deterministic **command guard** (denylist), hard **budget / iteration / wall-clock brakes**, **grounded verification** (commit-SHA existence), a **reward-hacking / diff-integrity scanner**, a **prompt-injection scanner**, and the **L3 allowlist policy gate**. Library + JSON CLI. |
+| [`loopengine/`](loopengine) | **Python** | The **runtime** (trigger → gather → verify → state → escalate); **self-consistency**, **Reflexion**, a **provider-agnostic agent maker** (Claude / free NVIDIA NIM / any OpenAI-compatible), **guarded MCP connectors**, a **multi-loop scheduler**, a **dashboard JSON API**, and JSON-schema-validated specs; CLI. |
 | [`schemas/`](schemas) | **JSON Schema** | The `loop.json` contract every loop is validated against. |
-| [`dashboard/`](dashboard) | **HTML/JS** | Read-only observability: state, findings, run log, budget. |
+| [`dashboard/`](dashboard) | **HTML/JS** | Read-only observability: live state, findings, run log, budget. |
 
 ## The verifier is the whole game
 
@@ -144,12 +145,14 @@ Open the dashboard at `http://127.0.0.1:8765` and click **Load live**, or open
 
 ```
 Strive_Engineering/
-├── crates/loopguard/      # Rust: guard + budget + verifier (lib + CLI), 13 tests
-├── loopengine/            # Python: runtime, state, CLI, git-commit-triage, 5 tests
+├── crates/loopguard/      # Rust core: guard, budget, verifier, integrity, injection,
+│                          #   policy (lib + JSON CLI) — 29 tests
+├── loopengine/            # Python runtime: runtime, assisted, makers, connectors,
+│                          #   scheduler, reflexion, consistency, dashboard_api, CLI — 46 tests
 ├── schemas/               # JSON Schema for a loop spec
 ├── loops/                 # example loop definitions (real targets stay gitignored)
-├── dashboard/             # HTML/JS observability viewer
-├── docs/                  # concepts, verification critique, safety, failure modes
+├── dashboard/             # HTML/JS observability viewer (+ live JSON API)
+├── docs/                  # concepts, verification critique, safety, failure modes, arXiv refs
 └── .github/workflows/     # CI: fmt + clippy + cargo test + pytest
 ```
 
@@ -234,9 +237,9 @@ until boring.**
 ## Develop & test
 
 ```bash
-cargo test                       # Rust unit tests (13)
+cargo test                       # Rust unit tests (29)
 cargo clippy --all-targets -- -D warnings
-pip install -e "loopengine[dev]" && pytest loopengine/tests -q   # Python (5)
+pip install -e "loopengine[dev]" && pytest loopengine/tests -q   # Python (46)
 ```
 
 CI runs all of the above on every push, plus a manual-dispatch report-only
