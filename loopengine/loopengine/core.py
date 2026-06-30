@@ -29,6 +29,7 @@ EXIT_UNVERIFIABLE = 4
 EXIT_TAMPERED = 5
 EXIT_INJECTION = 6
 EXIT_ESCALATE = 7
+EXIT_ISO_GAP = 8
 
 
 def _candidate_paths() -> list[Path]:
@@ -158,3 +159,21 @@ class Loopguard:
         data = json.loads(proc.stdout or '{"valid":false,"claims":[]}')
         data["unverifiable"] = proc.returncode == EXIT_UNVERIFIABLE
         return data
+
+    def verify_isomorphic(self, repo: str, shas: Sequence[str]) -> dict:
+        """Isomorphic-perturbation verification: check each SHA under the literal
+        and isomorphic predicates and demand they agree (arXiv:2604.15149 —
+        extensional verification induces reward hacking; isomorphic prevents it).
+
+        Returns ``{"consistent": bool, "gap": bool, "unverifiable": bool,
+        "claims": [...]}``. A ``gap`` (exit 8) means a claim passed one ungameable
+        check but not its equivalent — the signature of a verifier shortcut — and
+        invalidates the run exactly like a fabricated SHA. ``unverifiable`` (exit
+        4) means the check could not run and must escalate, not pass silently.
+        """
+        if not shas:
+            return {"consistent": True, "gap": False, "unverifiable": False, "claims": []}
+        proc = self._run(["verify-iso", repo, *shas])
+        return json.loads(
+            proc.stdout or '{"consistent":false,"gap":false,"unverifiable":true,"claims":[]}'
+        )

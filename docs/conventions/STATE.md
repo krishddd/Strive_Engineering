@@ -35,3 +35,22 @@ reflect "where things stand right now" — never a history (that's
 - **Open items from last run:** none
 - **Budget used this period:** unset
 - **Notes for next run:** none
+
+---
+
+## Machine state (JSON spine)
+
+The runtime's durable state is JSON (`.loop-state/state.json`), keyed by loop id,
+not this Markdown template — this file is the human-readable convention. Keys a
+loop may write to its own section:
+
+- `last_run`, `last_result`, `phase`, `cursor` — the basics above, machine form.
+- `notes` — durable structured notes (`loopengine.compaction.Notebook`): a list
+  of strings that survive compaction and process exit.
+
+The scheduler keeps its own bookkeeping in a **sibling** section, `<id>::sched`,
+so it never collides with the section the loop's runtime overwrites:
+
+- `history` — the last N result strings, for anomaly detection.
+- `anomaly` / `anomaly_detail` — `stall` or `oscillation` when flagged; a loop in
+  this state is halted and awaiting a human (clear the section to resume).

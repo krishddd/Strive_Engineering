@@ -71,6 +71,63 @@ verifies (deterministic + consistency-voted) → on REJECT, a **reflection** is
 written to episodic state and fed to the next attempt, bounded by the iteration
 cap. This is the no-progress-oscillation fix with memory rather than a dumb retry.
 
+## 5. One predicate is one shortcut → `loopguard::verifier` (isomorphic mode)
+
+- **LLMs Gaming Verifiers: RLVR can Lead to Reward Hacking** — arXiv:2604.15149.
+  The sharper claim beyond §1: *extensional* verification (a single literal
+  predicate the optimizer can target) **induces** reward hacking, whereas
+  *isomorphic* verification (the same claim checked under an equivalent variant)
+  **prevents** it. Isomorphic Perturbation Testing is the black-box probe.
+- **Benchmarking Reward Hack Detection in Code Environments via Contrastive
+  Analysis** — arXiv:2601.20103. Detecting hacks by comparing behavior across
+  semantically-equivalent environments — the same agree-or-flag idea applied to
+  code.
+- **Do Androids Dream of Breaking the Game? Auditing AI Agent Benchmarks with
+  BenchJack** — arXiv:2605.12673. Benchmarks themselves are gameable; a check is
+  only as trustworthy as its resistance to a shortcut.
+
+→ **What we built:** `verify-iso` confirms every cited SHA under *two*
+independent-but-equivalent predicates — the literal `cat-file -e`, and an
+isomorphic variant that re-derives the full oid, requires object type `commit`,
+and requires the claimed SHA to be a true prefix. Agreement is trust; a **gap**
+(passes one ungameable check but not its equivalent) is the shortcut signature
+and invalidates the run (exit 8), exactly like a fabricated SHA. The decision
+logic is a pure, exhaustively-tested classifier separate from any git call.
+
+## 6. Long loops overflow context → `loopengine.compaction`
+
+- **Effective Context Engineering for AI Agents** — Anthropic (engineering blog,
+  2025–2026). Names the levers that keep a long-horizon agent coherent:
+  *compaction* (summarize older turns, preserve decisions/open bugs, drop
+  redundant tool outputs), *structured note-taking* (a durable `NOTES.md` outside
+  the window), *sub-agent context isolation*, and *just-in-time tool calling*.
+- **Anthropic compaction API** (beta `compact-2026-01-12`) — summarize-and-drop
+  above a configurable token threshold, with a `pause_after_compaction` hook to
+  re-inject instructions before continuing. The production form of the same idea.
+- Context-growth benchmarks corroborating the failure mode: **LOCA-bench**
+  (arXiv:2602.07962), **SWE-EVO** (arXiv:2512.18470), **AgentSwing**
+  (arXiv:2603.27490).
+
+→ **What we built:** `Compactor` folds a transcript over a token threshold into a
+decisions-and-open-items summary (dropping tool outputs, keeping the recent tail
+verbatim) with an *injected* summarizer so it's deterministic and testable;
+`Notebook` gives durable structured notes backed by the state spine, surviving
+both compaction and process exit. The brake is structural — an unbounded
+transcript is an unbounded cost — not advisory.
+
+## 7. Loops get stuck or oscillate → `loopengine.scheduler` (anomaly guard)
+
+- **AgentGuard** and the wider 2026 agent-observability tooling (loop detection,
+  anomaly alerts, token/cost/latency/tool-failure gates) — the operational read
+  of Reflexion's *no-progress* failure mode at the orchestration layer.
+
+→ **What we built:** the scheduler keeps a bounded per-loop result history and a
+pure `detect_anomaly` classifier that flags a **stall** (the same failing result
+N times — stuck against one wall) or an **oscillation** (strict A/B flapping with
+no progress). A flagged loop is **halted with an escalation note** instead of
+re-run, the structural form of CLAUDE.md §8 — *it does not retry indefinitely and
+does not guess.*
+
 ## Sources
 
 - Reflexion — https://arxiv.org/abs/2303.11366
@@ -85,3 +142,9 @@ cap. This is the no-progress-oscillation fix with memory rather than a dumb retr
 - IPIGuard — https://arxiv.org/abs/2508.15310
 - Tool-Result-Parsing defense — https://arxiv.org/abs/2601.04795
 - VIGIL (verify-before-commit) — https://arxiv.org/abs/2601.05755
+- Contrastive reward-hack detection in code — https://arxiv.org/abs/2601.20103
+- BenchJack (auditing agent benchmarks) — https://arxiv.org/abs/2605.12673
+- Effective Context Engineering for AI Agents — https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
+- LOCA-bench (extreme context growth) — https://arxiv.org/abs/2602.07962
+- SWE-EVO (long-horizon software evolution) — https://arxiv.org/abs/2512.18470
+- AgentSwing (parallel context routing) — https://arxiv.org/abs/2603.27490

@@ -128,3 +128,34 @@ def test_scan_injection_clean_on_benign():
 
     report = Loopguard().scan_injection("CI is green; latency down 10%.")
     assert report["severity"] == "none"
+
+
+# -- isomorphic-perturbation verification (Rust verifier via wrapper) -------
+
+@needs_guard
+def test_verify_isomorphic_consistent_for_real_head(tmp_path):
+    import subprocess
+
+    from loopengine.core import Loopguard
+
+    # A throwaway repo with one real commit; its HEAD is consistent both ways.
+    repo = tmp_path / "r"
+    repo.mkdir()
+    env = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@e", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@e"}
+    run = lambda *a: subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True, text=True, env={**__import__("os").environ, **env})
+    run("init", "-q")
+    (repo / "f.txt").write_text("hi", encoding="utf-8")
+    run("add", "f.txt")
+    run("commit", "-qm", "first")
+    head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+
+    r = Loopguard().verify_isomorphic(str(repo), [head])
+    assert r["consistent"] and not r["gap"] and not r["unverifiable"]
+
+
+@needs_guard
+def test_verify_isomorphic_escalates_on_missing_repo():
+    from loopengine.core import Loopguard
+
+    r = Loopguard().verify_isomorphic("/no/such/repo/here", ["deadbeefdeadbeef"])
+    assert r["unverifiable"] is True  # must escalate, never silently pass

@@ -20,6 +20,7 @@ edit this file in the same session, don't let it drift.
 | `docs/safety.md` | Before wiring any connector, hook, or write action |
 | `docs/primitives-matrix.md` | Only if porting a pattern to a second tool |
 | `patterns/_template.md` | Copy this to start any new pattern spec |
+| `docs/SESSION_HANDOFF.md` | Fast orientation for a fresh session — architecture, build/test, gotchas |
 
 ---
 
@@ -213,6 +214,14 @@ A pattern is not "done," it's at a phase. Before calling any phase complete:
 > Keep entries short: date, what changed, what's next. This is how a new
 > session (or a future you) picks up context fast instead of re-deriving it.
 
+- **2026-06-30** — Pipeline upgrade to the 2026 research frontier. Added: Rust
+  **isomorphic-perturbation verifier** (`verify-iso`, exit 8 — extensional vs
+  isomorphic verification, arXiv:2604.15149); Python **context compaction +
+  structured note-taking** (`loopengine.compaction`, per Anthropic context
+  engineering); **scheduler anomaly/oscillation halting**; **spec authoring CLI**
+  (`init` / `cost` / `audit`). Docs/READMEs expanded, arXiv bibliography refreshed
+  (+§5–7), sanitized `docs/SESSION_HANDOFF.md` added. Tests **75 → 102** (34 Rust
+  + 68 Python), fmt + clippy clean. Next: optional CLI packaging; richer dashboard.
 - **YYYY-MM-DD** — Project scaffolded. CLAUDE.md created. No patterns built yet. Next: pick the first real recurring task and write its spec in `patterns/`.
 
 ---

@@ -11,7 +11,7 @@ import pytest
 from loopengine.connectors import ConnectorError, GuardedConnector, HttpMCPTransport
 from loopengine.core import LoopguardUnavailable, find_loopguard
 from loopengine.dashboard_api import route
-from loopengine.scheduler import Scheduler, parse_interval
+from loopengine.scheduler import Scheduler, detect_anomaly, parse_interval
 from loopengine.state import StateStore
 
 try:
@@ -76,6 +76,56 @@ def test_collision_guard_skips_second_writer_to_same_target(tmp_path):
     ]
     sched.run_once(specs, "2026-06-26T00:00:00Z")
     assert ran == ["a"]  # b skipped — same target claimed this tick
+
+
+# -- anomaly guard ----------------------------------------------------------
+
+def test_detect_anomaly_classifies_patterns():
+    assert detect_anomaly(["clean", "found", "clean"]).kind is None  # healthy
+    assert detect_anomaly(["error", "error", "error"]).kind == "stall"
+    assert detect_anomaly(["escalated", "escalated", "escalated"]).kind == "stall"
+    # a loop that's quietly clean every run is healthy, not a stall
+    assert detect_anomaly(["clean", "clean", "clean", "clean"]).kind is None
+    # strict alternation between two states with no progress
+    assert detect_anomaly(["proposed", "escalated", "proposed", "escalated"]).kind == "oscillation"
+
+
+def test_scheduler_records_history_and_flags_stall(tmp_path):
+    state = StateStore(tmp_path / "s.json")
+    specs = [{"id": "stuck", "kind": "git-commit-triage", "_result": "error"}]
+
+    def runner(spec, st):
+        return spec["_result"]
+
+    sched = Scheduler(state, runner=runner)
+    # three error ticks in a row → stall detected on the third
+    sched.run_once(specs, "2026-06-26T00:00:00Z")
+    sched.run_once(specs, "2026-06-26T00:01:00Z")
+    third = sched.run_once(specs, "2026-06-26T00:02:00Z")
+    item = third.items[0]
+    assert item.anomaly == "stall" and item.notify
+
+    # the *next* tick halts the loop instead of running it again
+    ran: list[str] = []
+
+    def recording(spec, st):
+        ran.append(spec["id"])
+        return "error"
+
+    sched2 = Scheduler(state, runner=recording)
+    fourth = sched2.run_once(specs, "2026-06-26T00:03:00Z")
+    assert ran == []  # halted, not re-run
+    assert fourth.items[0].ran is False and fourth.items[0].anomaly == "stall"
+
+
+def test_anomaly_halt_can_be_disabled(tmp_path):
+    state = StateStore(tmp_path / "s.json")
+    # pre-seed a stall flag in the scheduler's sibling section
+    state.write_section("x::sched", {"history": ["error", "error", "error"], "anomaly": "stall"})
+    ran: list[str] = []
+    sched = Scheduler(state, runner=lambda s, st: ran.append(s["id"]) or "clean", halt_on_anomaly=False)
+    sched.run_once([{"id": "x", "kind": "git-commit-triage"}], "2026-06-26T00:00:00Z")
+    assert ran == ["x"]  # not halted when the guard is off
 
 
 # -- dashboard API ----------------------------------------------------------

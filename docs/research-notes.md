@@ -92,6 +92,34 @@ Don't rely on memory here; these surfaces change. If building on another
 tool, find its equivalent for each of the five blocks and record the mapping
 in `docs/primitives-matrix.md`.
 
+## Tier 6 — Latest developments (2026), and how we responded
+
+This space moves fast; re-check before relying on any of it. As of this repo's
+last research pass:
+
+- **Context engineering is now its own discipline.** Anthropic's *Effective
+  Context Engineering for AI Agents* and the compaction API (beta header
+  `compact-2026-01-12`, with `pause_after_compaction`) make "what the agent
+  knows at the moment of action" a first-class concern. The named levers —
+  compaction, structured note-taking, sub-agent isolation, just-in-time tool
+  calling — are what keep a long-horizon loop from overflowing. → We built
+  `loopengine.compaction` (`Compactor` + `Notebook`).
+- **Deterministic orchestration is the validated pattern.** Anthropic's Dynamic
+  Workflows (May 2026, with Opus 4.8) put the loop/branch/verify logic in a
+  *script* — orchestration state lives in variables, not the model's working
+  memory, spending zero tokens on coordination. This is the same thesis as our
+  Python-deterministic `scheduler` and the Rust constraints core: keep the
+  control system out of the model.
+- **Reward-hacking research sharpened.** Beyond "agents delete the failing test"
+  (which we already scan for), the 2026 result is that *extensional* verification
+  induces hacking while *isomorphic* verification prevents it (arXiv:2604.15149),
+  with contrastive detection (arXiv:2601.20103) and benchmark-auditing
+  (BenchJack, arXiv:2605.12673) as corroboration. → We built `verify-iso`.
+- **Agent observability + cost tooling matured** (loop/anomaly detection, token/
+  cost/latency/tool-failure gates; readiness-audit and cost-estimate CLIs in the
+  wider loop-engineering ecosystem). → We built the scheduler anomaly guard and
+  the `audit` / `cost` CLI verbs.
+
 ## Open research questions for this project
 
 - Which connector(s) does our first real pattern actually need, and what's

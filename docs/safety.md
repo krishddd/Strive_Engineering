@@ -63,10 +63,37 @@ not retry) when:
 - It's about to take an action outside its allowlisted scope for its current
   phase
 - It hits its budget cap
-- Its own verifier fails to run
+- Its own verifier fails to run (`loopguard` exit 4 — unverifiable)
+- A cited claim shows an **isomorphic gap** (`loopguard verify-iso` exit 8): it
+  passed one ungameable check but not its equivalent — a verifier shortcut
+- The scheduler flags an **anomaly** (`stall` or `oscillation`): the loop is
+  stuck or making no progress and must not be re-run blindly
 
 An escalation should always include: what it was trying to do, what stopped
 it, and what it needs from a human to proceed.
+
+## loopguard exit-code contract
+
+The Python runtime keys its escalation decisions off these stable exit codes:
+
+| Code | Meaning | Runtime response |
+|---|---|---|
+| 0 | ok / allow / clean / auto-ok | proceed |
+| 2 | command blocked by the denylist | refuse the command |
+| 3 | a cited SHA is fabricated | invalidate the run |
+| 4 | verifier could not run (unverifiable) | **escalate** — never treat as clean |
+| 5 | diff tampers with the verifier (reward hacking) | **escalate**, no retry |
+| 6 | high-severity prompt injection in untrusted text | **escalate** before acting |
+| 7 | change not auto-mergeable under the L3 allowlist | fall back to L2 propose-only |
+| 8 | isomorphic-perturbation gap (verifier shortcut) | **escalate** — invalidate the run |
+
+## Long-running loops — context as a budget
+
+A loop that runs many iterations spends context as surely as it spends tokens.
+`loopengine.compaction` makes that a structural brake: once a transcript crosses
+its threshold it is compacted (decisions and open items kept, tool outputs
+dropped). Treat the compaction threshold as part of a pattern's budget cap, not
+a tuning knob — an uncompacted long loop is an unbounded-cost loop.
 
 ## Review cadence
 

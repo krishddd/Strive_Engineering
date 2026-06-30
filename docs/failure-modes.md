@@ -68,6 +68,28 @@ run repeats already-done work or misses where it left off. **Mitigation:**
 state read/write is part of the pattern's definition of done, not an
 afterthought — see the checklist in `CLAUDE.md` §10.
 
+### Context overflow on a long-running loop
+A loop that runs many iterations accumulates transcript until it overflows the
+context window, or silently drops the early decisions that still matter — and
+its cost climbs the whole time. **Mitigation:** `loopengine.compaction` compacts
+the transcript over a token threshold (keeping decisions/open bugs, dropping
+redundant tool outputs) and `Notebook` keeps durable notes outside the window.
+Treat the compaction threshold as part of the budget cap (see `safety.md`).
+
+### Oscillation / no-progress (single-verifier brute force)
+A loop flaps between two states (fix A breaks B, fix B breaks A) or keeps hitting
+the same wall, re-running and burning budget with nothing to show. **Mitigation:**
+the scheduler's anomaly guard detects `stall` (same failing result N times) and
+`oscillation` (strict A/B flapping) from the result history and halts the loop
+with an escalation note instead of re-running it. *Known risk we now watch for.*
+
+### Reward hacking via a single literal verifier
+The agent satisfies the letter of one check without its intent (an ambiguous SHA
+prefix, a tag passed off as a commit, a check that's technically green). A lone
+extensional verifier is one shortcut waiting to be found. **Mitigation:**
+`loopguard verify-iso` checks each claim under an equivalent second predicate and
+escalates on any gap — isomorphic verification, not extensional. *Known risk.*
+
 ### Scope creep on connector permissions
 A connector originally scoped read-only quietly gets write access added to
 unblock one task, and the new scope outlives the task. **Mitigation:** scope

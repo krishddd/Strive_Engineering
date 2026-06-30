@@ -23,4 +23,8 @@ pub use guard::{Decision, Guard};
 pub use injection::{scan as scan_injection, InjectionReport, Severity};
 pub use integrity::{scan_diff, IntegrityIssue, IntegrityReport};
 pub use policy::{evaluate as evaluate_policy, AllowPolicy, PolicyDecision};
-pub use verifier::{verify_batch, verify_commit_sha, BatchResult, ClaimVerdict, Verdict};
+pub use verifier::{
+    classify_isomorphic, prefix_consistent, verify_batch, verify_batch_isomorphic,
+    verify_commit_isomorphic, verify_commit_sha, BatchResult, ClaimVerdict, IsoBatchResult,
+    IsoClaimVerdict, IsoVerdict, Verdict,
+};

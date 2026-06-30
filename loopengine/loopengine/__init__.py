@@ -7,10 +7,25 @@ budget brakes, grounded verification) to the Rust ``loopguard`` core.
 """
 
 from .assisted import AssistedFixLoop, AssistedResult, ScriptMaker
+from .authoring import (
+    AuditReport,
+    CostEstimate,
+    audit_spec,
+    estimate_cost,
+    scaffold_spec,
+)
 from .budget import Budget, BudgetExceeded
+from .compaction import (
+    Compactor,
+    CompactionResult,
+    Message,
+    Notebook,
+    estimate_tokens,
+    extractive_summary,
+)
 from .connectors import ConnectorError, GuardedConnector, HttpMCPTransport, build_connector
 from .consistency import ConsensusResult, majority_vote
-from .scheduler import Scheduler, TickSummary, parse_interval
+from .scheduler import AnomalyVerdict, Scheduler, TickSummary, detect_anomaly, parse_interval
 from .core import Loopguard, LoopguardUnavailable
 from .makers import AnthropicClient, LLMMaker, OpenAICompatibleClient, make_maker
 from .reflexion import Critique, ReflexionResult, run_reflexion
@@ -29,9 +44,22 @@ __all__ = [
     "build_connector",
     "Scheduler",
     "TickSummary",
+    "AnomalyVerdict",
+    "detect_anomaly",
     "parse_interval",
     "Budget",
     "BudgetExceeded",
+    "AuditReport",
+    "CostEstimate",
+    "audit_spec",
+    "estimate_cost",
+    "scaffold_spec",
+    "Compactor",
+    "CompactionResult",
+    "Message",
+    "Notebook",
+    "estimate_tokens",
+    "extractive_summary",
     "ConsensusResult",
     "majority_vote",
     "Loopguard",
