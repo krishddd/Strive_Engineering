@@ -77,10 +77,14 @@ class Loopguard:
         self.binary = find_loopguard(binary)
 
     def _run(self, args: Sequence[str]) -> subprocess.CompletedProcess[str]:
+        # Explicit UTF-8 everywhere the boundary is crossed: the Rust CLI emits
+        # UTF-8 JSON, and Windows' default (cp1252) would corrupt it.
         return subprocess.run(
             [self.binary, *args],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
 
@@ -103,6 +107,8 @@ class Loopguard:
             input=diff_text,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
         return json.loads(proc.stdout or '{"clean":true,"findings":[]}')
@@ -117,6 +123,8 @@ class Loopguard:
             input=text,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
         return json.loads(proc.stdout or '{"severity":"none","signals":[]}')
@@ -139,6 +147,8 @@ class Loopguard:
                 input=diff_text,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 check=False,
             )
         finally:

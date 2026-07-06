@@ -80,6 +80,26 @@ def test_found_then_clean(tmp_path):
     assert "no new commits" in r2.note
 
 
+def test_non_ascii_commit_subject_survives(tmp_path):
+    """Regression: on Windows, subprocess text mode defaults to cp1252 and turned
+    em-dashes in commit subjects into mojibake in STATE (e.g. 'â€"')."""
+    repo = _make_repo(tmp_path, 1)
+    subject = "feat: T32 benchmark — AgentDojo über the “guarded” A/B path"
+    (repo / "unicode.txt").write_text("x")
+    _git(repo, "add", "-A")
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", subject],
+        check=True,
+        encoding="utf-8",
+    )
+    from loopengine.gitscan import commits
+
+    found = commits(str(repo), "main", None, "30 days ago")
+    subjects = [c.subject for c in found]
+    assert subject in subjects
+    assert not any("â€" in s or "�" in s for s in subjects)
+
+
 @needs_guard
 def test_missing_target_is_fatal_escalation(tmp_path):
     state = StateStore(tmp_path / "state.json")

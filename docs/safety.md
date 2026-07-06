@@ -33,6 +33,25 @@ These should be blocked by a `PreToolUse` hook, not left to instructions:
 - Direct writes to production credentials/secrets files
 - Any database write outside an explicitly allow-listed read-only query path
 
+## The one sanctioned L2 write: proposal delivery
+
+Per the matrix above, an L2 loop may open a PR — that *is* the L2 deliverable
+(`CLAUDE.md` §5). The mechanism is `loopengine.proposer.GitHubProposer`,
+deliberately narrower than a write-scope connector:
+
+- It fires **only on a `proposed` result** — an escalated/errored run never
+  reaches GitHub.
+- It pushes **only `loop/*` branches**, with an explicit refspec and never
+  `--force` — enforced in code, so it cannot be repurposed to push to main.
+- The PR body **carries the verifier evidence** (test command, attempts,
+  reflections, commit SHA) so the reviewer sees what was checked, not just
+  what changed.
+- A delivery failure leaves the local branch intact, logs
+  `pr-delivery-failed` to the run log, and stops — no retry loop.
+
+Everything else on GitHub (closing issues, merging PRs, commenting as an
+action) remains connector territory and follows the scope rules below.
+
 ## Connector / MCP scope rules
 
 - Default every new connector to **read-only**. Write scope is a deliberate,
@@ -45,7 +64,7 @@ These should be blocked by a `PreToolUse` hook, not left to instructions:
 
 | Connector | Scope | Allowed to touch | Used by pattern(s) |
 |---|---|---|---|
-| _(none configured yet)_ | | | |
+| `GitHubTransport` (`loopengine.connectors`) | read (structurally: every tool is a GET; no mutating code path exists) | PRs, issues, workflow runs of the configured repo slug; bodies capped at 2000 chars and injection-scanned | none yet — built for the upcoming PR-triage loop |
 
 ## Budget caps
 

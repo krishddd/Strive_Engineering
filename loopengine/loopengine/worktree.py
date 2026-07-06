@@ -39,6 +39,8 @@ class Worktree:
             ["git", "-C", cwd or self.repo, *args],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
         if proc.returncode != 0:
@@ -91,7 +93,8 @@ class Worktree:
                 return 126, f"blocked by guard [{decision.rule}]: {decision.reason}"
         proc = subprocess.run(
             command, shell=True, cwd=str(self.path),
-            capture_output=True, text=True, check=False,
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace", check=False,
         )
         return proc.returncode, (proc.stdout + proc.stderr)
 

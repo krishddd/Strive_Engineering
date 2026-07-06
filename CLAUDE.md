@@ -155,7 +155,8 @@ for each — trigger, verifier, state contract, blast radius, current phase.
 
 | Pattern | Cadence | Current Phase | Spec |
 |---|---|---|---|
-| _(none yet — add the first real recurring task here)_ | | L0 | `patterns/` |
+| `sec-guardrails-triage` — daily commit triage of the SEC_Guardrails_Agent repo | 1d (run locally) | L1 | `loops/local-sec-guardrails.json` (gitignored — private target) |
+| `ci-self-triage` — daily commit triage of this repo, closed loop in Actions (cron → cursors on `loop-state` branch → rolling `loop-report` issue) | 1d (cron 05:23 UTC) | L1 | `loops/ci-self.json` |
 
 Good first candidates (low blast radius, easy to verify, classic L1 starts):
 daily issue/PR triage, changelog drafting from merged PRs, post-merge cleanup
@@ -214,6 +215,19 @@ A pattern is not "done," it's at a phase. Before calling any phase complete:
 > Keep entries short: date, what changed, what's next. This is how a new
 > session (or a future you) picks up context fast instead of re-deriving it.
 
+- **2026-07-06** — Closed the loop on GitHub. (1) UTF-8 forced on every
+  subprocess boundary (Windows cp1252 was writing mojibake into STATE findings;
+  regression test added). (2) CI `daily-triage` is now a real L1 loop: daily
+  cron, cursors persisted on a dedicated `loop-state` branch, actionable
+  findings published to a rolling `loop-report` issue via the new
+  `loopengine report` command (exits 1 on clean — nothing published). (3) New
+  `loopengine.proposer` — the one sanctioned L2 write (documented in
+  `docs/safety.md`): pushes only `loop/*` branches, never force, opens a PR
+  whose body carries the verifier evidence; wired via the spec's `proposer`
+  block. (4) Read-only `GitHubTransport` behind `GuardedConnector` (structurally
+  GET-only; issue/PR bodies injection-scanned). Tests **102 → 120** (34 Rust +
+  86 Python). Next: first PR-triage loop on the GitHub connector; verify the
+  scheduled CI run end-to-end after push.
 - **2026-06-30** — Pipeline upgrade to the 2026 research frontier. Added: Rust
   **isomorphic-perturbation verifier** (`verify-iso`, exit 8 — extensional vs
   isomorphic verification, arXiv:2604.15149); Python **context compaction +

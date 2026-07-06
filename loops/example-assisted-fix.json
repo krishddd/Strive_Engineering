@@ -13,6 +13,11 @@
     "type": "nvidia",
     "model": "meta/llama-3.3-70b-instruct"
   },
+  "proposer": {
+    "type": "github",
+    "remote": "origin",
+    "token_env": "GITHUB_TOKEN"
+  },
   "budget": {
     "max_tokens": 200000,
     "max_iterations": 3,

@@ -49,6 +49,18 @@
         "max_lines": { "type": "integer", "minimum": 1 }
       }
     },
+    "proposer": {
+      "type": "object",
+      "description": "assisted-fix L2/L3 only: deliver a 'proposed' result as a GitHub PR. The one sanctioned L2 write (docs/safety.md): push the loop/* branch (explicit refspec, never force) and open a PR whose body carries the verifier evidence. Fires only on a 'proposed' result.",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "enum": ["github"] },
+        "remote": { "type": "string", "default": "origin", "description": "Git remote to push the proposal branch to." },
+        "repo_slug": { "type": "string", "description": "owner/name override; default parses it from the remote URL." },
+        "token_env": { "type": "string", "default": "GITHUB_TOKEN", "description": "Env var holding the token (GH_TOKEN also honored)." }
+      }
+    },
     "connectors": {
       "type": "array",
       "description": "Read-only MCP connectors. Every tool return is injection-scanned before the loop acts. Write scope is L3-only.",

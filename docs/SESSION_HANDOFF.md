@@ -27,10 +27,13 @@ subprocess + JSON — no FFI, no maturin.
   `makers` (provider-agnostic agent: Claude + free NVIDIA NIM / any OpenAI-compatible,
   stdlib-only HTTP, structured-output JSON), `worktree`, `consistency` (majority vote),
   `reflexion` (evaluator-optimizer retry), `compaction` (context compaction + structured
-  note-taking), `connectors` (`GuardedConnector` + live `HttpMCPTransport`; every tool
-  return injection-scanned), `scheduler` (multi-loop ticks: cadence / priority /
-  triage-inbox / collision guard / **anomaly halting**), `authoring` (`init` / `cost` /
-  `audit`), `dashboard_api`, `validate`, `core`, `state`, `cli`.
+  note-taking), `connectors` (`GuardedConnector` + live `HttpMCPTransport` + read-only
+  `GitHubTransport`; every tool return injection-scanned), `scheduler` (multi-loop
+  ticks: cadence / priority / triage-inbox / collision guard / **anomaly halting**),
+  `report` (markdown loop report; exits 1 on a clean run so CI publishes nothing),
+  `proposer` (the one sanctioned L2 write: push the `loop/*` branch — explicit
+  refspec, never force — and open a PR carrying the verifier evidence), `authoring`
+  (`init` / `cost` / `audit`), `dashboard_api`, `validate`, `core`, `state`, `cli`.
 - **Also:** `schemas/loop.schema.json`, `loops/*.json` examples, `dashboard/index.html`,
   `docs/` (concepts, research-arxiv, safety, failure-modes), `.github/workflows/ci.yml`.
 
@@ -46,7 +49,18 @@ export LOOPGUARD_BIN="$(pwd)/target/release/loopguard.exe"
 python -m pytest loopengine/tests -q
 ```
 
-Current: **34 Rust + 68 Python = 102 tests** green, fmt + clippy clean.
+Current: **34 Rust + 86 Python = 120 tests** green, fmt + clippy clean.
+
+## The closed CI loop
+
+`.github/workflows/ci.yml` `daily-triage` runs on a daily cron (05:23 UTC):
+restore cursors from the **`loop-state` branch** → run `loops/ci-self.json`
+(report-only L1) → publish actionable findings to a rolling issue labeled
+`loop-report` (`loopengine report` exits 1 on a clean run, so nothing is
+published — triage-inbox discipline) → commit `.loop-state/` back to the
+`loop-state` branch. `.loop-state/` stays gitignored on `main`; the state
+branch is its durable home. All subprocess boundaries are forced to UTF-8
+(Windows cp1252 used to mangle non-ASCII commit subjects into mojibake).
 
 ## Hard-won gotchas
 

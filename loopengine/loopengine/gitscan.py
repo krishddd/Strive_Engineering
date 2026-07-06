@@ -17,10 +17,14 @@ class GitError(RuntimeError):
 
 
 def _git(repo: str, *args: str) -> str:
+    # Explicit UTF-8: on Windows, text=True defaults to the ANSI code page
+    # (cp1252), which mangles non-ASCII commit subjects into mojibake.
     proc = subprocess.run(
         ["git", "-C", repo, *args],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
     if proc.returncode != 0:

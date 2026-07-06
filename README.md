@@ -13,7 +13,7 @@ and the orchestration in **Python**.
 ![rust](https://img.shields.io/badge/rust-loopguard-orange?logo=rust)
 ![python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![phase](https://img.shields.io/badge/phases-L0%E2%86%92L3-3ee8c5)
-![tests](https://img.shields.io/badge/tests-102%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-120%20passing-brightgreen)
 ![status](https://img.shields.io/badge/status-active-brightgreen)
 
 </div>
@@ -69,7 +69,7 @@ binary) — no FFI or maturin build step.
 | Component | Language | Owns |
 |---|---|---|
 | [`crates/loopguard`](crates/loopguard) | **Rust** | Deterministic **command guard** (denylist), hard **budget / iteration / wall-clock brakes**, **grounded verification** (commit-SHA existence) plus **isomorphic-perturbation verification** (anti-reward-hacking), a **reward-hacking / diff-integrity scanner**, a **prompt-injection scanner**, and the **L3 allowlist policy gate**. Library + JSON CLI. |
-| [`loopengine/`](loopengine) | **Python** | The **runtime** (trigger → gather → verify → state → escalate); **context compaction + structured note-taking** for long horizons; **self-consistency**, **Reflexion**, a **provider-agnostic agent maker** (Claude / free NVIDIA NIM / any OpenAI-compatible), **guarded MCP connectors**, a **multi-loop scheduler with anomaly/oscillation halting**, **spec authoring/cost/audit** tooling, a **dashboard JSON API**, and JSON-schema-validated specs; CLI. |
+| [`loopengine/`](loopengine) | **Python** | The **runtime** (trigger → gather → verify → state → escalate); **context compaction + structured note-taking** for long horizons; **self-consistency**, **Reflexion**, a **provider-agnostic agent maker** (Claude / free NVIDIA NIM / any OpenAI-compatible), **guarded MCP connectors** (incl. a structurally read-only **GitHub transport**), a **GitHub PR proposer** (the sanctioned L2 write), a **markdown loop reporter** (feeds the CI rolling issue), a **multi-loop scheduler with anomaly/oscillation halting**, **spec authoring/cost/audit** tooling, a **dashboard JSON API**, and JSON-schema-validated specs; CLI. |
 | [`schemas/`](schemas) | **JSON Schema** | The `loop.json` contract every loop is validated against. |
 | [`dashboard/`](dashboard) | **HTML/JS** | Read-only observability: live state, findings, run log, budget. |
 
@@ -116,7 +116,7 @@ annotated bibliography in [`docs/research-arxiv.md`](docs/research-arxiv.md):
 | Automations / scheduling | `loopengine.scheduler` — multi-loop ticks: cadence, priority, triage-inbox, collision guard, **anomaly/oscillation halting** |
 | Worktrees (isolation) | `loopengine.worktree` — every assisted-fix attempt runs in an isolated worktree |
 | Skills (codified knowledge) | loop specs + `docs/` patterns |
-| Connectors (MCP) | `loopengine.connectors` — live JSON-RPC `HttpMCPTransport`; every tool return is injection-scanned before the loop acts (read-only by default) |
+| Connectors (MCP) | `loopengine.connectors` — live JSON-RPC `HttpMCPTransport` + a structurally read-only `GitHubTransport` (PRs / issues / workflow runs); every tool return is injection-scanned before the loop acts (read-only by default) |
 | Sub-agents (maker/checker) | the **assisted-fix** loop: maker proposes, checker (integrity + tests) verifies |
 | Memory / external state | `loopengine.state` — JSON state + JSONL run log; `loopengine.compaction.Notebook` for durable structured notes |
 | Context management (long horizons) | `loopengine.compaction` — threshold-driven compaction + structured note-taking so many-iteration loops don't overflow context |
@@ -207,12 +207,14 @@ Strive_Engineering/
 │                          #   integrity, injection, policy (lib + JSON CLI) — 34 tests
 ├── loopengine/            # Python runtime: runtime, assisted, makers, connectors,
 │                          #   scheduler (+ anomaly guard), compaction, authoring,
-│                          #   reflexion, consistency, dashboard_api, CLI — 68 tests
+│                          #   report, proposer, reflexion, consistency,
+│                          #   dashboard_api, CLI — 86 tests
 ├── schemas/               # JSON Schema for a loop spec
 ├── loops/                 # example loop definitions (real targets stay gitignored)
 ├── dashboard/             # HTML/JS observability viewer (+ live JSON API)
 ├── docs/                  # concepts, verification critique, safety, failure modes, arXiv refs
 └── .github/workflows/     # CI: fmt + clippy + cargo test + pytest
+                           #   + the daily-triage loop (cron → loop-state branch → rolling issue)
 ```
 
 ## The assisted-fix loop (L2)
@@ -226,7 +228,15 @@ worktree off base_ref → maker proposes an edit → checker gates it:
    3. run test_command in worktree  (the ground-truth verifier)
 → on test failure: Reflexion feeds the reason into the next attempt (bounded by the cap)
 → on success: commit to a branch and leave it for a human — it never auto-merges
+→ optional last mile: the proposer pushes the loop/* branch and opens a PR
+   whose body carries the verifier evidence (test command, attempts, reflections)
 ```
+
+The **proposer** (`"proposer": {"type": "github"}` in the spec) is the one
+sanctioned L2 write — see [docs/safety.md](docs/safety.md). Its limits are
+enforced in code, not prose: it fires only on a `proposed` result, pushes only
+`loop/*` branches with an explicit refspec (never `--force`), and a delivery
+failure leaves the local branch intact and stops — no retry loop.
 
 The maker is where the loop **actually prompts an agent**. It's pluggable across
 providers:
@@ -286,6 +296,12 @@ return is run through the injection scanner before the loop can act on it**
 explicit, L3-only scope. The transport is injected, so there is no path to act on
 an unscanned result.
 
+The built-in `GitHubTransport` reads PRs, issues, and workflow runs for a repo —
+and is **structurally** read-only: every tool maps to an HTTP GET and no mutating
+code path exists, so even a misconfigured `scope: write` grant cannot turn it into
+a write connector. Issue/PR bodies (classic indirect-injection carriers) are capped
+and pass the same injection gate as any other tool return.
+
 ## Build phases — gate before advancing
 
 `L0` manual → **`L1` report-only** (`git-commit-triage`) → **`L2` assisted PRs**
@@ -296,13 +312,16 @@ until boring.**
 ## Develop & test
 
 ```bash
-cargo test                       # Rust unit tests (29)
+cargo test                       # Rust unit tests (34)
 cargo clippy --all-targets -- -D warnings
-pip install -e "loopengine[dev]" && pytest loopengine/tests -q   # Python (46)
+pip install -e "loopengine[dev]" && pytest loopengine/tests -q   # Python (86)
 ```
 
-CI runs all of the above on every push, plus a manual-dispatch report-only
-self-triage job.
+CI runs all of the above on every push. On a daily cron it also runs the
+**closed self-triage loop**: restore cursors from the `loop-state` branch →
+triage this repo (report-only L1) → publish actionable findings to a rolling
+issue labeled `loop-report` (a clean run publishes nothing) → persist state
+back to the `loop-state` branch.
 
 ## Status
 
@@ -312,16 +331,21 @@ self-triage job.
 - ✅ Python `loopengine`: runtime, state, CLI, self-consistency, Reflexion, schema
   validation, worktree isolation, `assisted-fix` (L2 propose / L3 auto-merge), a
   **provider-agnostic agent maker** (Claude + free NVIDIA NIM / any OpenAI-compatible),
-  **guarded MCP connectors with a live JSON-RPC transport**, a **multi-loop scheduler**
+  **guarded MCP connectors** (live JSON-RPC transport + a **structurally read-only
+  GitHub transport**), a **GitHub PR proposer** (loop/* branches only, never force),
+  a **markdown loop reporter**, a **multi-loop scheduler**
   (cadence + priority + triage-inbox + collision guard + **anomaly/oscillation halting**),
   **context compaction + structured note-taking**, **spec authoring/cost/audit** tooling,
-  and a **read-only dashboard JSON API** — **68 tests**; all deterministic (injected clock
+  and a **read-only dashboard JSON API** — **86 tests**; all deterministic (injected clock
   / runner / transport / summarizer — no sockets).
 - ✅ JSON schema (per-kind conditional validation), example loops, dashboard, CI,
   [arXiv bibliography](docs/research-arxiv.md).
+- ✅ **The loop is closed on GitHub**: daily cron triage with durable cursors on a
+  `loop-state` branch and a rolling `loop-report` issue; L2 results delivered as PRs
+  carrying their verifier evidence.
 - ✅ **Full L0→L3 ladder shipped** + scheduling, connectors, long-horizon context
-  management, and observability. Optional next: packaging the CLIs for distribution;
-  more loop kinds; richer dashboard.
+  management, and observability. Optional next: a PR-triage loop kind on the GitHub
+  connector; packaging the CLIs for distribution; richer dashboard.
 
 ## License
 

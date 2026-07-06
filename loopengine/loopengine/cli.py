@@ -18,6 +18,12 @@ def _load_spec(path: str) -> dict:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+def _utc_now() -> str:
+    import datetime as _dt
+
+    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     spec = _load_spec(args.spec)
     try:
@@ -38,7 +44,9 @@ def cmd_run(args: argparse.Namespace) -> int:
                 print(f"  branch for review: {res.branch} @ {res.commit}")
             for r in res.reflections:
                 print(f"  reflection: {r}")
-            return 0 if res.result == "proposed" else 1
+            if res.result == "proposed" and spec.get("proposer"):
+                return _deliver_proposal(spec, res, state)
+            return 0 if res.result in ("proposed", "merged") else 1
 
         runtime = LoopRuntime(spec, state)
     except LoopguardUnavailable as e:
@@ -53,6 +61,40 @@ def cmd_run(args: argparse.Namespace) -> int:
     for f in watch:
         print(f"  watch {f.text} ({f.sha})")
     return 0 if res.result in ("clean", "found") else 1
+
+
+def _deliver_proposal(spec: dict, res, state: StateStore) -> int:
+    """Carry a 'proposed' result the last mile: push the loop/* branch and open
+    a PR (the one sanctioned L2 write — docs/safety.md). A delivery failure
+    leaves the local branch intact and exits non-zero; it never retries."""
+    import os
+
+    from .proposer import GitHubProposer, GitHubRestAPI, ProposeError
+
+    prop = spec["proposer"]
+    try:
+        token = os.environ.get(prop.get("token_env", "GITHUB_TOKEN")) or os.environ.get("GH_TOKEN")
+        api = GitHubRestAPI(token=token)
+        pr = GitHubProposer(api, remote=prop.get("remote", "origin")).propose(
+            spec, res, slug=prop.get("repo_slug")
+        )
+    except ProposeError as e:
+        print(f"  PR delivery failed (branch is still local): {e}", file=sys.stderr)
+        state.append_runlog(
+            {"ts": _utc_now(), "loop": spec["id"], "result": "proposed",
+             "action": "pr-delivery-failed", "branch": res.branch, "note": str(e)}
+        )
+        return 1
+    print(f"  PR opened: {pr['url']}")
+    section = state.read_section(spec["id"])
+    section["pr_url"] = pr["url"]
+    section["pr_number"] = pr["number"]
+    state.write_section(spec["id"], section)
+    state.append_runlog(
+        {"ts": _utc_now(), "loop": spec["id"], "result": "proposed",
+         "action": "opened-pr", "branch": res.branch, "note": pr["url"]}
+    )
+    return 0
 
 
 def cmd_guard(args: argparse.Namespace) -> int:
@@ -140,6 +182,22 @@ def cmd_serve(args: argparse.Namespace) -> int:
 def cmd_show(args: argparse.Namespace) -> int:
     section = StateStore(args.state).read_section(args.loop_id)
     print(json.dumps(section, indent=2))
+    return 0
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    """Markdown report for one loop; exit 1 when there is nothing to publish
+    (clean run or unknown loop) so CI can skip the issue update."""
+    from .report import is_actionable, render_markdown
+
+    section = StateStore(args.state).read_section(args.loop_id)
+    if not section:
+        print(f"no state for loop {args.loop_id!r}", file=sys.stderr)
+        return 1
+    if not is_actionable(section) and not args.even_clean:
+        print(f"nothing to publish: last result {section.get('last_result')!r}", file=sys.stderr)
+        return 1
+    print(render_markdown(args.loop_id, section))
     return 0
 
 
@@ -240,6 +298,12 @@ def build_parser() -> argparse.ArgumentParser:
     psv.add_argument("--state", default=".loop-state/state.json")
     psv.add_argument("--port", type=int, default=8765)
     psv.set_defaults(func=cmd_serve)
+
+    prp = sub.add_parser("report", help="render a loop's state as markdown (for a rolling issue)")
+    prp.add_argument("state")
+    prp.add_argument("loop_id")
+    prp.add_argument("--even-clean", action="store_true", help="emit a report even for a clean run")
+    prp.set_defaults(func=cmd_report)
 
     pin = sub.add_parser("init", help="scaffold a schema-valid starter loop spec")
     pin.add_argument("id", help="loop id")

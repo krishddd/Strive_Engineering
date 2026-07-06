@@ -119,6 +119,136 @@ class HttpMCPTransport:
             return json.loads(r.read().decode("utf-8"))
 
 
+class GitHubTransport:
+    """Read-only GitHub REST transport conforming to ``MCPTransport``.
+
+    Structurally read-only: every tool maps to an HTTP **GET** and there is no
+    code path in this class that can issue a mutating verb — so even a
+    misconfigured ``scope: write`` grant cannot turn it into a write connector.
+    (Proposal delivery — the one sanctioned L2 write — lives in ``proposer``,
+    not here.)
+
+    Responses are trimmed to the fields a triage loop needs: issue and PR
+    *bodies* are untrusted text and pass through the GuardedConnector's
+    injection scan like any other tool return; keeping payloads small is also
+    the context-compaction discipline applied at the source.
+
+    ``fetch`` is injected for tests (no network, no token).
+    """
+
+    def __init__(
+        self,
+        slug: str,
+        token: str | None = None,
+        api_base: str = "https://api.github.com",
+        fetch=None,
+    ) -> None:
+        import os
+
+        self.slug = slug
+        self.token = token or os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+        self.api_base = api_base.rstrip("/")
+        self._fetch = fetch or self._http_get
+
+    # tool name -> (path template, allowed query params)
+    TOOLS: dict[str, tuple[str, tuple[str, ...]]] = {
+        "list_pull_requests": ("/repos/{slug}/pulls", ("state", "base", "per_page")),
+        "get_pull_request": ("/repos/{slug}/pulls/{number}", ()),
+        "list_issues": ("/repos/{slug}/issues", ("state", "labels", "per_page")),
+        "get_issue": ("/repos/{slug}/issues/{number}", ()),
+        "list_workflow_runs": (
+            "/repos/{slug}/actions/runs",
+            ("branch", "status", "event", "per_page"),
+        ),
+    }
+
+    _BODY_CAP = 2000  # chars of untrusted body text to carry, max
+
+    def call(self, tool: str, args: dict[str, Any]) -> str:
+        import json as _json
+        import urllib.parse
+
+        entry = self.TOOLS.get(tool)
+        if entry is None:
+            raise ConnectorError(f"github: unknown (or non-read) tool {tool!r}")
+        path_tpl, allowed_params = entry
+        path = path_tpl.format(slug=self.slug, number=args.get("number", ""))
+        params = {k: str(v) for k, v in args.items() if k in allowed_params}
+        params.setdefault("per_page", "30")
+        url = f"{self.api_base}{path}?{urllib.parse.urlencode(params)}"
+        data = self._fetch(url)
+        return _json.dumps(self._trim(tool, data), ensure_ascii=False)
+
+    # -- trimming -------------------------------------------------------------
+
+    def _trim(self, tool: str, data: Any) -> Any:
+        if tool in ("list_pull_requests", "get_pull_request"):
+            return [self._trim_pr(d) for d in data] if isinstance(data, list) else self._trim_pr(data)
+        if tool in ("list_issues", "get_issue"):
+            return [self._trim_issue(d) for d in data] if isinstance(data, list) else self._trim_issue(data)
+        runs = data.get("workflow_runs", []) if isinstance(data, dict) else data
+        return [self._trim_run(d) for d in runs]
+
+    def _trim_pr(self, d: dict) -> dict:
+        return {
+            "number": d.get("number"),
+            "title": d.get("title"),
+            "state": d.get("state"),
+            "draft": d.get("draft"),
+            "user": (d.get("user") or {}).get("login"),
+            "head": (d.get("head") or {}).get("ref"),
+            "base": (d.get("base") or {}).get("ref"),
+            "updated_at": d.get("updated_at"),
+            "html_url": d.get("html_url"),
+            "body": (d.get("body") or "")[: self._BODY_CAP],
+        }
+
+    def _trim_issue(self, d: dict) -> dict:
+        return {
+            "number": d.get("number"),
+            "title": d.get("title"),
+            "state": d.get("state"),
+            "labels": [l.get("name") for l in d.get("labels", [])],
+            "user": (d.get("user") or {}).get("login"),
+            "updated_at": d.get("updated_at"),
+            "html_url": d.get("html_url"),
+            "is_pull_request": "pull_request" in d,
+            "body": (d.get("body") or "")[: self._BODY_CAP],
+        }
+
+    def _trim_run(self, d: dict) -> dict:
+        return {
+            "id": d.get("id"),
+            "name": d.get("name"),
+            "head_branch": d.get("head_branch"),
+            "event": d.get("event"),
+            "status": d.get("status"),
+            "conclusion": d.get("conclusion"),
+            "run_started_at": d.get("run_started_at"),
+            "html_url": d.get("html_url"),
+        }
+
+    def _http_get(self, url: str) -> Any:
+        import json as _json
+        import urllib.error
+        import urllib.request
+
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "loopengine-connector",
+        }
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+        req = urllib.request.Request(url, headers=headers, method="GET")
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:  # noqa: S310 — API base is config
+                return _json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            raise ConnectorError(f"github GET {url} -> {e.code}") from e
+        except urllib.error.URLError as e:
+            raise ConnectorError(f"github unreachable: {e.reason}") from e
+
+
 def build_connector(cfg: dict, transport: MCPTransport, guard: Loopguard | None = None) -> GuardedConnector:
     """Build a GuardedConnector from a spec connector config + an injected transport.
 
