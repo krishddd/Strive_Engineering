@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "loops": {
+    "ci-self-triage": {
+      "phase": "L1",
+      "last_run": "2026-07-06T09:12:38Z",
+      "last_result": "found",
+      "cursors": {
+        "main": "9e0e6f1d941ff89a43bcc5bc842317f3cb40fcd9"
+      },
+      "findings": [
+        {
+          "bucket": "watch",
+          "text": "feat: close the loop on GitHub \u2014 scheduled CI triage, PR proposer, read-only GitHub connector",
+          "sha": "9e0e6f1"
+        },
+        {
+          "bucket": "watch",
+          "text": "feat: 2026 research upgrade \u2014 isomorphic verifier, context compaction, anomaly guard, authoring CLI",
+          "sha": "0be1771"
+        },
+        {
+          "bucket": "watch",
+          "text": "docs: refresh README for the full L0\u2192L3 feature set",
+          "sha": "0272724"
+        },
+        {
+          "bucket": "watch",
+          "text": "feat: multi-loop scheduler, live MCP transport, dashboard JSON API",
+          "sha": "994d57e"
+        },
+        {
+          "bucket": "watch",
+          "text": "feat: free NVIDIA NIM / OpenAI-compatible maker (provider-agnostic agent)",
+          "sha": "5ff91f8"
+        },
+        {
+          "bucket": "watch",
+          "text": "feat: L3 unattended auto-merge (allowlist gate) + guarded MCP connectors",
+          "sha": "8ba9537"
+        },
+        {
+          "bucket": "high",
+          "text": "feat: Claude-backed agent maker for the assisted-fix loop",
+          "sha": "a42d33f"
+        },
+        {
+          "bucket": "high",
+          "text": "feat: L2 assisted-fix loop \u2014 worktree-isolated maker/checker, propose-only",
+          "sha": "4260c7b"
+        },
+        {
+          "bucket": "watch",
+          "text": "feat: research-driven hardening \u2014 reward-hacking, injection, consistency, reflexion",
+          "sha": "c78cbe3"
+        },
+        {
+          "bucket": "watch",
+          "text": "docs: add status badge to README",
+          "sha": "2e304d9"
+        },
+        {
+          "bucket": "watch",
+          "text": "docs: polish README \u2014 badges, architecture diagram, verifier rationale",
+          "sha": "5ad8e44"
+        },
+        {
+          "bucket": "watch",
+          "text": "Loop-engineering runtime: Rust constraints core + Python orchestrator",
+          "sha": "2bf8051"
+        }
+      ],
+      "note": "",
+      "tokens_spent": 0
+    }
+  }
+}
