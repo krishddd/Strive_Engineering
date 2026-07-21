@@ -3,7 +3,7 @@
   "loops": {
     "ci-self-triage": {
       "phase": "L1",
-      "last_run": "2026-07-20T08:19:30Z",
+      "last_run": "2026-07-21T07:43:54Z",
       "last_result": "clean",
       "cursors": {
         "main": "9e0e6f1d941ff89a43bcc5bc842317f3cb40fcd9"
