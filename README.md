@@ -38,6 +38,92 @@ brakes and safety guards that make an *unattended* loop trustworthy. The first
 built-in loop, `git-commit-triage`, watches a repo's commits read-only and writes
 a prioritized, **source-cited** report — changing nothing.
 
+## Architecture at a glance
+
+Every arrow that leaves the orchestration and touches something risky — a shell
+action, a cited SHA, an ingested tool return, a diff about to merge — is forced
+through the **Rust core** first. The core is the only thing that can say *block*,
+*fabricated*, *escalate*, *tamper*, or *injection*, and it says so with a stable
+exit code the Python side branches on.
+
+```mermaid
+flowchart TB
+    subgraph TRIG["① Triggers"]
+        direction LR
+        CRON["cron / CI schedule"]
+        SCHED["scheduler<br/>cadence · priority · anomaly halt"]
+    end
+
+    subgraph PY["② loopengine · Python — orchestration"]
+        direction TB
+        RT["runtime<br/>git-commit-triage (L1)"]
+        ASST["assisted-fix<br/>maker → checker (L2 / L3)"]
+        MAKER["maker<br/>Claude · NVIDIA NIM · OpenAI-compat"]
+        WT["worktree isolation"]
+        CONN["connectors<br/>GuardedConnector · GitHub (read-only)"]
+        LONG["compaction + Notebook<br/>long-horizon context"]
+        REFLEX["reflexion · consistency"]
+    end
+
+    subgraph RS["③ loopguard · Rust — constraints core"]
+        direction TB
+        GUARD["guard — command denylist → 2"]
+        BUDGET["budget — token / iter / wall-clock"]
+        VERIFY["verifier — grounded → 3/4"]
+        ISO["verify-iso — isomorphic gap → 8"]
+        INTEG["scan-diff — tamper → 5"]
+        INJECT["scan-injection → 6"]
+        POLICY["check-allowlist — L3 gate → 7"]
+    end
+
+    subgraph STATE["④ Durable state (survives every run)"]
+        direction LR
+        JSON[("state.json<br/>cursors · findings")]
+        LOG[("runlog.jsonl<br/>append-only")]
+        NB[("Notebook notes")]
+    end
+
+    subgraph OUT["⑤ Outputs"]
+        direction LR
+        REPORT["report → rolling issue"]
+        PROP["proposer → loop/* PR"]
+        DASH["dashboard + JSON API"]
+        HUMAN(["human — escalate"])
+    end
+
+    CRON --> SCHED --> RT
+    SCHED --> ASST
+    ASST --> MAKER
+    ASST --> WT
+    RT & ASST --> CONN
+    ASST --> LONG
+    ASST --> REFLEX
+
+    ASST -. shell actions .-> GUARD
+    RT -. cited SHAs .-> VERIFY
+    VERIFY --- ISO
+    ASST -. proposed diff .-> INTEG
+    CONN -. tool returns .-> INJECT
+    ASST -. L3 auto-merge .-> POLICY
+    SCHED -. caps .-> BUDGET
+
+    RT --> JSON
+    RT --> LOG
+    LONG --> NB
+
+    JSON --> REPORT
+    ASST --> PROP
+    JSON --> DASH
+    GUARD & VERIFY & INTEG & INJECT & POLICY -->|non-zero exit| HUMAN
+
+    classDef rust fill:#f74c00,stroke:#b23600,color:#fff;
+    classDef py fill:#3776ab,stroke:#274d6e,color:#fff;
+    classDef store fill:#0d1117,stroke:#3ee8c5,color:#3ee8c5;
+    class GUARD,BUDGET,VERIFY,ISO,INTEG,INJECT,POLICY rust;
+    class RT,ASST,MAKER,WT,CONN,LONG,REFLEX py;
+    class JSON,LOG,NB store;
+```
+
 ## Why Rust *and* Python
 
 The research that drives this repo is blunt: *"the code is written by the loop, but
