@@ -153,3 +153,54 @@ jobs:
         with:
           name: triage-state
           path: .loop-state/
+
+  # A second L1 loop, deliberately read-only: triage this repo's open PRs over the
+  # guarded (read-only, injection-scanned) GitHub connector. The job's token is
+  # granted read scope only — `pull-requests: read` — so it structurally cannot
+  # modify a PR, comment, or push anything. Output is the run's job summary (an
+  # ephemeral daily snapshot); no rolling issue, no state branch, so no write is
+  # ever needed. Cursor persistence (to suppress re-reporting) is intentionally
+  # skipped here because it would require contents:write — out of scope for a
+  # read-only loop.
+  pr-triage:
+    name: pr-triage (scheduled, read-only)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    needs: []
+    permissions:
+      contents: read
+      pull-requests: read
+    concurrency:
+      group: pr-triage
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: pr-triage
+      # The GuardedConnector injection-scans every tool return via loopguard.
+      - run: cargo build --release
+      - run: pip install -e loopengine
+
+      - name: run the pr-triage loop (read-only)
+        env:
+          # The automatic token, scoped read-only by the job `permissions` above.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: loopengine run loops/example-pr-triage.json --state .loop-state/state.json
+
+      - name: write findings to the run summary
+        run: |
+          set -eu
+          if body=$(loopengine report .loop-state/state.json example-pr-triage); then
+            printf '%s\n' "$body" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### PR triage: clean — no open PRs need attention." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr-triage-state
+          path: .loop-state/
