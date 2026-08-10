@@ -98,8 +98,22 @@ build session.
 
 ---
 
+### Encoding corruption at a subprocess boundary (mojibake)
+Text captured from a subprocess is decoded with the platform default code page
+instead of UTF-8, so any non-ASCII byte is silently mangled into "mojibake"
+(a UTF-8 em-dash `—` becomes `â€"`). It doesn't crash — it just writes wrong
+data into durable state, where it persists. **Mitigation:** force `encoding="utf-8"`
+on every subprocess boundary and on `stdout`; a regression test asserts non-ASCII
+survives a round-trip. Remediating *already-corrupted* state is a separate step —
+the encoding fix stops new damage but never repairs old data — so
+`scripts/scrub_mojibake.py` recovers existing state files. *Occurred here — see
+the incident log below.*
+
+---
+
 ## Log of actual incidents in this project
 
 | Date | Pattern | What happened | Root cause | Fix / mitigation applied |
 |---|---|---|---|---|
-| _(none yet)_ | | | | |
+| 2026-07-06 | ci-self-triage / sec-guardrails-triage | Non-ASCII commit subjects (em-dashes) were stored as mojibake (`â€"`) in `.loop-state/state.json` findings, surfacing in the rolling issue body. | On Windows, `subprocess.run(text=True)` defaults to cp1252, not UTF-8, so `git log` output was decoded wrong before being written to state. | Forced UTF-8 on every subprocess boundary + `stdout` (`gitscan._git`, `cli.main`); added a round-trip regression test. |
+| 2026-08-10 | sec-guardrails-triage | The above fix stopped new corruption but left 7 already-mangled strings in the local state file. | Remediation of existing data was never done when the encoding bug was fixed (verification debt: we fixed the leak, not the spill). | Added `scripts/scrub_mojibake.py` (idempotent cp1252→UTF-8 recovery, unit-tested) and ran it over the local state file. |

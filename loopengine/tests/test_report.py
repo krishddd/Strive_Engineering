@@ -5,7 +5,14 @@ from __future__ import annotations
 import json
 
 from loopengine.cli import main
-from loopengine.report import ACTIONABLE_RESULTS, is_actionable, render_markdown
+from loopengine.report import (
+    ACTIONABLE_RESULTS,
+    CLOSE_MARKER,
+    is_actionable,
+    render_markdown,
+    render_resolved_markdown,
+    trailing_clean,
+)
 
 FOUND_SECTION = {
     "phase": "L1",
@@ -47,6 +54,47 @@ def test_render_neutralizes_backticks_in_untrusted_text():
     section["findings"] = [{"bucket": "high", "text": "evil ``` breakout", "sha": "abc1234"}]
     md = render_markdown("x", section)
     assert "```" not in md
+
+
+CLEAN_SECTION = {"phase": "L1", "last_run": "2026-07-21T07:43:54Z", "last_result": "clean", "note": "no new commits"}
+
+
+def test_trailing_clean_counts_only_the_tail_streak():
+    assert trailing_clean(["found", "clean", "clean", "clean"]) == 3
+    assert trailing_clean(["clean", "found"]) == 0
+    assert trailing_clean([]) == 0
+
+
+def test_resolved_banner_states_it_is_resolved_and_marks_close_past_threshold():
+    md = render_resolved_markdown("ci-self-triage", CLEAN_SECTION, consecutive_clean=3, close_after=7)
+    assert "Resolved — nothing outstanding" in md
+    assert "**3**" in md
+    assert CLOSE_MARKER not in md  # below threshold: edit, don't close
+    closed = render_resolved_markdown("ci-self-triage", CLEAN_SECTION, consecutive_clean=7, close_after=7)
+    assert CLOSE_MARKER in closed
+
+
+def test_cli_resolved_emits_banner_and_counts_streak(tmp_path, capsys):
+    state = tmp_path / "state.json"
+    state.write_text(json.dumps({"version": 1, "loops": {"t": CLEAN_SECTION}}), encoding="utf-8")
+    runlog = tmp_path / "state.runlog.jsonl"
+    runlog.write_text(
+        "\n".join(
+            json.dumps({"loop": "t", "result": r})
+            for r in ["found", "clean", "clean"]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    # Plain report on a clean run: nothing to publish.
+    assert main(["report", str(state), "t"]) == 1
+    capsys.readouterr()
+    # --resolved: banner + streak of 2 from the run log, exit 0.
+    assert main(["report", str(state), "t", "--resolved", "--close-after", "7"]) == 0
+    out = capsys.readouterr().out
+    assert "Resolved — nothing outstanding" in out
+    assert "**2**" in out
+    assert CLOSE_MARKER not in out
 
 
 def test_cli_report_exit_codes(tmp_path, capsys):

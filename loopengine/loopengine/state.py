@@ -41,3 +41,24 @@ class StateStore:
         self.runlog_path.parent.mkdir(parents=True, exist_ok=True)
         with self.runlog_path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(row) + "\n")
+
+    def runlog_results(self, loop_id: str) -> list[str]:
+        """Return this loop's run results in chronological order (oldest first).
+
+        Reads the append-only run log — the audit trail — so callers can reason
+        about streaks (e.g. how many consecutive clean runs) without the machine
+        state needing to carry a counter."""
+        if not self.runlog_path.exists():
+            return []
+        results: list[str] = []
+        for line in self.runlog_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if row.get("loop") == loop_id and "result" in row:
+                results.append(row["result"])
+        return results

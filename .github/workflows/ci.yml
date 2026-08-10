@@ -57,7 +57,9 @@ jobs:
     name: daily-triage (scheduled, report-only)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    # Scheduled runs skip the test jobs; manual runs still gate on them.
+    # Both scheduled and manual (workflow_dispatch) triage runs are independent of
+    # the test jobs — this is report-only and never touches main, so it doesn't
+    # gate on rust/python. (The rust+python jobs run on push/PR to protect main.)
     needs: []
     permissions:
       contents: write   # push .loop-state to the loop-state branch
@@ -72,6 +74,9 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: daily-triage
       - run: cargo build --release
       - run: pip install -e loopengine
 
@@ -87,25 +92,41 @@ jobs:
       - name: run the triage loop (report-only)
         run: loopengine run loops/ci-self.json
 
-      - name: publish findings to the rolling issue (only when actionable)
+      - name: publish findings / resolve the rolling issue
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -eu
           title="Loop report: ci-self-triage"
+          gh label create loop-report --description "rolling loop reports" --force || true
+          num=$(gh issue list --label loop-report --state open \
+                  --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+
           if body=$(loopengine report .loop-state/state.json ci-self-triage); then
-            gh label create loop-report --description "rolling loop reports" --force || true
-            num=$(gh issue list --label loop-report --state open \
-                    --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+            # Actionable run: publish/refresh the findings.
             if [ -n "$num" ]; then
               gh issue edit "$num" --body "$body"
-              echo "updated issue #$num"
+              echo "updated issue #$num with findings"
             else
               gh issue create --title "$title" --label loop-report --body "$body"
             fi
           else
-            echo "clean run — nothing to publish (triage-inbox discipline)"
+            # Clean run: don't leave stale findings live. If an issue is open, edit
+            # it to the resolved banner; once the clean streak is long enough the
+            # banner carries a close marker and we close the issue outright.
+            if [ -n "$num" ]; then
+              banner=$(loopengine report .loop-state/state.json ci-self-triage --resolved --close-after 7)
+              gh issue edit "$num" --body "$banner"
+              if printf '%s' "$banner" | grep -q 'loop-report:close'; then
+                gh issue close "$num" --comment "Clean streak reached — closing; a future finding reopens a fresh report."
+                echo "closed issue #$num (clean streak)"
+              else
+                echo "edited issue #$num to the resolved banner"
+              fi
+            else
+              echo "clean run, no open issue — nothing to publish (triage-inbox discipline)"
+            fi
           fi
 
       - name: persist loop state to the loop-state branch

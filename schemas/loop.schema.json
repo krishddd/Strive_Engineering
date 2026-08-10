@@ -10,8 +10,8 @@
     "id": { "type": "string", "description": "Unique loop id; keys its state section." },
     "kind": {
       "type": "string",
-      "enum": ["git-commit-triage", "assisted-fix"],
-      "description": "Loop type. git-commit-triage: read-only triage (L1). assisted-fix: propose a verified change on a branch in an isolated worktree (L2, no auto-merge)."
+      "enum": ["git-commit-triage", "pr-triage", "assisted-fix"],
+      "description": "Loop type. git-commit-triage: read-only commit triage (L1). pr-triage: read-only open-PR triage over the guarded GitHub connector (L1). assisted-fix: propose a verified change on a branch in an isolated worktree (L2, no auto-merge)."
     },
     "task": {
       "type": "string",
@@ -88,10 +88,10 @@
     "state_file": { "type": "string", "description": "Path to the JSON state file." },
     "target": {
       "type": "object",
-      "required": ["repo"],
       "additionalProperties": false,
       "properties": {
         "repo": { "type": "string", "description": "Absolute path to the target git repo." },
+        "slug": { "type": "string", "description": "pr-triage: GitHub 'owner/name' whose open PRs are triaged (read-only, via the guarded connector)." },
         "refs": {
           "type": "array",
           "items": { "type": "string" },
@@ -123,11 +123,18 @@
   "allOf": [
     {
       "if": { "properties": { "kind": { "const": "git-commit-triage" } } },
-      "then": { "properties": { "target": { "required": ["refs"] } } }
+      "then": { "properties": { "target": { "required": ["repo", "refs"] } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "pr-triage" } } },
+      "then": { "properties": { "target": { "required": ["slug"] } } }
     },
     {
       "if": { "properties": { "kind": { "const": "assisted-fix" } } },
-      "then": { "required": ["task", "test_command"] }
+      "then": {
+        "required": ["task", "test_command"],
+        "properties": { "target": { "required": ["repo"] } }
+      }
     }
   ]
 }

@@ -1,0 +1,11 @@
+{
+  "id": "example-pr-triage",
+  "kind": "pr-triage",
+  "phase": "L1",
+  "cadence": "1d",
+  "paused": false,
+  "state_file": ".loop-state/state.json",
+  "target": { "slug": "krishddd/Strive_Engineering" },
+  "connectors": [{ "name": "github", "scope": "read" }],
+  "budget": { "max_tokens": 30000, "max_iterations": 1, "wall_clock_secs": 300 }
+}

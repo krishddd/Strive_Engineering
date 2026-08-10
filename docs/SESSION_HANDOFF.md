@@ -23,6 +23,8 @@ subprocess + JSON — no FFI, no maturin.
   **4** unverifiable→escalate, **5** tamper, **6** injection, **7** allowlist→escalate,
   **8** isomorphic gap.
 - **`loopengine/loopengine/` (Python):** `runtime` (L1 `git-commit-triage`),
+  `prtriage` (L1 `pr-triage` — read-only open-PR triage over the guarded GitHub
+  connector, cursor-gated),
   `assisted` (L2 propose / L3 allowlist auto-merge via fast-forward, worktree-isolated),
   `makers` (provider-agnostic agent: Claude + free NVIDIA NIM / any OpenAI-compatible,
   stdlib-only HTTP, structured-output JSON), `worktree`, `consistency` (majority vote),
@@ -35,7 +37,10 @@ subprocess + JSON — no FFI, no maturin.
   refspec, never force — and open a PR carrying the verifier evidence), `authoring`
   (`init` / `cost` / `audit`), `dashboard_api`, `validate`, `core`, `state`, `cli`.
 - **Also:** `schemas/loop.schema.json`, `loops/*.json` examples, `dashboard/index.html`,
-  `docs/` (concepts, research-arxiv, safety, failure-modes), `.github/workflows/ci.yml`.
+  `docs/` (concepts, research-arxiv, safety, failure-modes), `.github/workflows/ci.yml`,
+  and the **enforcement layer** `.claude/settings.json` → `scripts/hooks/guard_bash.py`
+  (PreToolUse hook: blocks force-push / `rm -rf` / history-rewrite in interactive
+  sessions), plus `scripts/scrub_mojibake.py` (idempotent cp1252→UTF-8 state repair).
 
 ## Build & test (Git Bash / MINGW64)
 
@@ -49,15 +54,16 @@ export LOOPGUARD_BIN="$(pwd)/target/release/loopguard.exe"
 python -m pytest loopengine/tests -q
 ```
 
-Current: **34 Rust + 86 Python = 120 tests** green, fmt + clippy clean.
+Current: **34 Rust + 101 Python = 135 tests** green, fmt + clippy clean.
 
 ## The closed CI loop
 
 `.github/workflows/ci.yml` `daily-triage` runs on a daily cron (05:23 UTC):
 restore cursors from the **`loop-state` branch** → run `loops/ci-self.json`
 (report-only L1) → publish actionable findings to a rolling issue labeled
-`loop-report` (`loopengine report` exits 1 on a clean run, so nothing is
-published — triage-inbox discipline) → commit `.loop-state/` back to the
+`loop-report`; on a clean run instead, edit that issue to a "resolved — nothing
+outstanding" banner (`loopengine report --resolved`) and close it after a 7-run
+clean streak, so the inbox reflects reality → commit `.loop-state/` back to the
 `loop-state` branch. `.loop-state/` stays gitignored on `main`; the state
 branch is its durable home. All subprocess boundaries are forced to UTF-8
 (Windows cp1252 used to mangle non-ASCII commit subjects into mojibake).

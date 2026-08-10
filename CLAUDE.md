@@ -13,13 +13,16 @@ edit this file in the same session, don't let it drift.
 
 | File | When to open it |
 |---|---|
-| `STATE.md` | Start of every run — current status per pattern |
-| `RUNLOG.md` | Append a row at the end of every run |
+| `.loop-state/state.json` | Machine state — current status per loop, keyed by id (the runtime's spine). Gitignored on `main`; its durable home is the `loop-state` branch. |
+| `.loop-state/state.runlog.jsonl` | Append-only run log (one JSON row per run) — the audit trail. |
+| `docs/conventions/STATE.md` | The human-readable STATE convention (the machine spine above is the source of truth). |
+| `docs/conventions/RUNLOG.md` | The human-readable RUNLOG convention. |
+| `loops/*.json` | One JSON spec per loop pattern (schema-validated) — this is where a pattern's trigger/verifier/state/budget live. |
 | `docs/research-notes.md` | Before designing a new pattern or primitive |
 | `docs/failure-modes.md` | Before raising a pattern's phase; append after any real incident |
 | `docs/safety.md` | Before wiring any connector, hook, or write action |
 | `docs/primitives-matrix.md` | Only if porting a pattern to a second tool |
-| `patterns/_template.md` | Copy this to start any new pattern spec |
+| `.claude/settings.json` | The enforcement layer — PreToolUse hook wiring (see §8). |
 | `docs/SESSION_HANDOFF.md` | Fast orientation for a fresh session — architecture, build/test, gotchas |
 
 ---
@@ -96,23 +99,28 @@ etc. in `.claude/settings.json`), not in prose here.
 ```
 /
 ├── CLAUDE.md                 # this file
-├── STATE.md                  # durable memory — current status of every loop
-├── RUNLOG.md                 # append-only log of every loop run
+├── crates/loopguard/         # Rust constraints core (guard/budget/verifier/…)
+├── loopengine/               # Python runtime, CLI, tests
+├── loops/*.json              # one JSON spec per loop pattern (schema-validated) — §7
+├── schemas/loop.schema.json  # the loop-spec contract
+├── .loop-state/              # machine state + run log (gitignored on main;
+│                             #   durable home is the loop-state branch)
 ├── .claude/
-│   ├── settings.json         # hooks live here
-│   ├── agents/               # subagent definitions
-│   └── skills/               # skill definitions
-├── patterns/                 # one .md spec per loop pattern (see §7)
+│   └── settings.json         # the enforcement layer — PreToolUse hooks (§8)
+├── scripts/                  # helper/verifier scripts a hook calls
+│   └── hooks/guard_bash.py   #   the interactive-session safety guard
 ├── docs/
+│   ├── conventions/          # human-readable STATE.md / RUNLOG.md conventions
 │   ├── primitives-matrix.md  # tool-to-primitive mapping if multi-tool
 │   ├── failure-modes.md      # incident log, append as things break
 │   ├── safety.md             # expanded version of §8
 │   └── research-notes.md     # condensed reading list, sources, decisions
-└── scripts/                  # any verifier / helper scripts a hook calls
+└── .github/workflows/ci.yml  # tests + the closed daily-triage loop
 ```
 
-Don't build this whole tree on day one. Create a folder when the first thing
-that needs it exists, not before.
+The durable state is the JSON spine (`.loop-state/`), not root-level Markdown;
+the Markdown under `docs/conventions/` documents the convention. Create a folder
+when the first thing that needs it exists, not before.
 
 ---
 
@@ -133,14 +141,18 @@ to advance — not impatience.
 
 ## 6. Memory / State Conventions
 
-- `STATE.md` holds **current status only** — one section per active pattern,
-  overwritten each run. This is what a loop reads at the start of a run to
-  know what happened last time.
-- `RUNLOG.md` is **append-only** — one line per run: timestamp, pattern,
-  result (found/clean/error), action taken, link to artifact (PR, issue).
-  Never edited, only appended.
-- Every pattern's spec (in `patterns/`) must state explicitly: what it reads
-  from STATE.md, what it writes back, and what counts as "nothing to do."
+- `.loop-state/state.json` holds **current status only** — one section per loop
+  keyed by id, overwritten each run. This is what a loop reads at the start of a
+  run to know what happened last time. (`docs/conventions/STATE.md` documents the
+  convention; the JSON is the source of truth.)
+- `.loop-state/state.runlog.jsonl` is **append-only** — one JSON row per run:
+  timestamp, loop, result (found/clean/error/escalated), action taken, counts,
+  note. Never edited, only appended. It is the audit trail streaks are read from
+  (e.g. "how many consecutive clean runs" drives the rolling-issue resolution).
+- Every pattern's spec (in `loops/*.json`) must state explicitly (via its kind +
+  target + budget): what it reads from state, what it writes back, and what counts
+  as "nothing to do." Non-ASCII in state must survive a round-trip — force UTF-8 on
+  every subprocess boundary (see `docs/failure-modes.md`, mojibake incident).
 - If a loop can't tell a recoverable error (a failing test — feedback to act
   on) from a fatal one (a missing credential — hard stop), it is not ready to
   run unattended. Fix that before raising its phase.
@@ -150,13 +162,21 @@ to advance — not impatience.
 ## 7. Pattern Backlog
 
 Add a row when a pattern is identified; fill in cadence/level/status as it
-moves through the build phases. Keep `patterns/<name>.md` as the single spec
-for each — trigger, verifier, state contract, blast radius, current phase.
+moves through the build phases. The single spec for each pattern is its
+`loops/*.json` (trigger, verifier via `kind`, state contract, budget/blast
+radius, current phase).
 
 | Pattern | Cadence | Current Phase | Spec |
 |---|---|---|---|
-| `sec-guardrails-triage` — daily commit triage of the SEC_Guardrails_Agent repo | 1d (run locally) | L1 | `loops/local-sec-guardrails.json` (gitignored — private target) |
-| `ci-self-triage` — daily commit triage of this repo, closed loop in Actions (cron → cursors on `loop-state` branch → rolling `loop-report` issue) | 1d (cron 05:23 UTC) | L1 | `loops/ci-self.json` |
+| `sec-guardrails-triage` — daily commit triage of the SEC_Guardrails_Agent repo | 1d (manual, local) | L1 — **stalled** (no local trigger; last run 2026-06-25) | `loops/local-sec-guardrails.json` (gitignored — private target) |
+| `ci-self-triage` — daily commit triage of this repo, closed loop in Actions (cron → cursors on `loop-state` branch → rolling `loop-report` issue) | 1d (cron 05:23 UTC) | L1 — **healthy** (15+ clean scheduled runs; report-only by nature, so it stays L1) | `loops/ci-self.json` |
+| `example-pr-triage` — read-only open-PR triage over the guarded GitHub connector | 1d | L1 (example / not yet scheduled) | `loops/example-pr-triage.json` |
+
+> **`sec-guardrails-triage` is stalled, not retired.** It has a 1d cadence but no
+> trigger (the CI loop got a cron; this one never did), so it silently stopped —
+> exactly the failure a loop system should make visible. Either give it a local
+> trigger (Task Scheduler / `loopengine schedule` on a timer) or mark it `paused`
+> in its spec. Don't leave it in the ambiguous middle.
 
 Good first candidates (low blast radius, easy to verify, classic L1 starts):
 daily issue/PR triage, changelog drafting from merged PRs, post-merge cleanup
@@ -168,7 +188,10 @@ high token cost and high blast radius for a system you haven't trusted yet.
 ## 8. Safety Rules (non-negotiable — convert each into a hook, don't rely on this prose alone)
 
 - **No destructive git operations** without an explicit human-approved step:
-  no force-push, no `rm -rf`, no history rewrite from inside a loop.
+  no force-push, no `rm -rf`, no history rewrite from inside a loop. *Enforced:*
+  `.claude/settings.json` wires a PreToolUse hook (`scripts/hooks/guard_bash.py`)
+  that blocks these shapes in interactive sessions; the Rust `loopguard` denylist
+  covers loop-spawned commands.
 - **No write-scope MCP/connector calls** (ticket close, message send, deploy)
   from an L1 or L2 pattern. Write scope is an L3-only privilege, and only for
   an allowlisted action set defined in `docs/safety.md`.
@@ -215,6 +238,22 @@ A pattern is not "done," it's at a phase. Before calling any phase complete:
 > Keep entries short: date, what changed, what's next. This is how a new
 > session (or a future you) picks up context fast instead of re-deriving it.
 
+- **2026-08-10** — Pipeline gap sweep. (1) **Enforcement layer now exists**:
+  `.claude/settings.json` + `scripts/hooks/guard_bash.py` — a PreToolUse hook that
+  blocks force-push / `rm -rf` / history-rewrite in interactive sessions (§8 turned
+  from prose into a check; unit-tested). (2) **Clean-run issue hygiene**: a clean
+  run now edits the rolling `loop-report` issue to a "resolved — nothing outstanding"
+  banner (and closes it after a 7-run clean streak) instead of leaving stale findings
+  live — `report.render_resolved_markdown` + `loopengine report --resolved`, wired in
+  `ci.yml`. (3) **New loop kind `pr-triage`** — read-only open-PR triage over the
+  guarded `GitHubTransport` (the connector was unused by any loop); schema + CLI +
+  example + 6 tests. (4) **Mojibake**: logged the 2026-07-06 incident in
+  `docs/failure-modes.md`, added idempotent `scripts/scrub_mojibake.py`, scrubbed the
+  local state. (5) CLAUDE.md synced to reality (§4/§6/§7 point at `.loop-state/` +
+  `loops/*.json`, not root `STATE.md`/`patterns/`); `ci.yml` comment fixed;
+  `Swatinem/rust-cache` added to `daily-triage`. Tests **101 → ~113 Python** green.
+  Next: give `sec-guardrails-triage` a real local trigger or mark it `paused`;
+  optionally schedule `pr-triage` in CI (read-only token).
 - **2026-07-06** — Closed the loop on GitHub. (1) UTF-8 forced on every
   subprocess boundary (Windows cp1252 was writing mojibake into STATE findings;
   regression test added). (2) CI `daily-triage` is now a real L1 loop: daily

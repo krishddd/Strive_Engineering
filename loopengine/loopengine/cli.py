@@ -48,11 +48,19 @@ def cmd_run(args: argparse.Namespace) -> int:
                 return _deliver_proposal(spec, res, state)
             return 0 if res.result in ("proposed", "merged") else 1
 
-        runtime = LoopRuntime(spec, state)
+        if spec.get("kind") == "pr-triage":
+            from .connectors import GitHubTransport, build_connector
+            from .prtriage import PRTriageLoop
+
+            slug = spec["target"]["slug"]
+            conn_cfg = (spec.get("connectors") or [{"name": "github"}])[0]
+            connector = build_connector(conn_cfg, GitHubTransport(slug))
+            res = PRTriageLoop(spec, state, connector).run()
+        else:
+            res = LoopRuntime(spec, state).run()
     except LoopguardUnavailable as e:
         print(f"error: {e}", file=sys.stderr)
         return 4
-    res = runtime.run()
     high = [f for f in res.findings if f.bucket == "high"]
     watch = [f for f in res.findings if f.bucket == "watch"]
     print(f"[{res.result}] {spec['id']}: {len(high)} high, {len(watch)} watch — {res.note or 'ok'}")
@@ -186,19 +194,37 @@ def cmd_show(args: argparse.Namespace) -> int:
 
 
 def cmd_report(args: argparse.Namespace) -> int:
-    """Markdown report for one loop; exit 1 when there is nothing to publish
-    (clean run or unknown loop) so CI can skip the issue update."""
-    from .report import is_actionable, render_markdown
+    """Markdown report for one loop.
 
-    section = StateStore(args.state).read_section(args.loop_id)
+    Default: exit 1 when there is nothing to publish (clean run or unknown loop)
+    so CI skips the issue update. With ``--resolved``, a *clean* run instead
+    renders the "resolved — nothing outstanding" banner (exit 0) so CI can edit
+    the rolling issue to reflect reality rather than leaving stale findings live."""
+    from .report import (
+        is_actionable,
+        render_markdown,
+        render_resolved_markdown,
+        trailing_clean,
+    )
+
+    store = StateStore(args.state)
+    section = store.read_section(args.loop_id)
     if not section:
         print(f"no state for loop {args.loop_id!r}", file=sys.stderr)
         return 1
-    if not is_actionable(section) and not args.even_clean:
-        print(f"nothing to publish: last result {section.get('last_result')!r}", file=sys.stderr)
-        return 1
-    print(render_markdown(args.loop_id, section))
-    return 0
+    if is_actionable(section):
+        print(render_markdown(args.loop_id, section))
+        return 0
+    # Not actionable (clean / unknown result).
+    if args.resolved:
+        streak = trailing_clean(store.runlog_results(args.loop_id))
+        print(render_resolved_markdown(args.loop_id, section, streak, close_after=args.close_after))
+        return 0
+    if args.even_clean:
+        print(render_markdown(args.loop_id, section))
+        return 0
+    print(f"nothing to publish: last result {section.get('last_result')!r}", file=sys.stderr)
+    return 1
 
 
 def cmd_init(args: argparse.Namespace) -> int:
@@ -302,7 +328,18 @@ def build_parser() -> argparse.ArgumentParser:
     prp = sub.add_parser("report", help="render a loop's state as markdown (for a rolling issue)")
     prp.add_argument("state")
     prp.add_argument("loop_id")
-    prp.add_argument("--even-clean", action="store_true", help="emit a report even for a clean run")
+    prp.add_argument("--even-clean", action="store_true", help="emit the findings report even for a clean run")
+    prp.add_argument(
+        "--resolved",
+        action="store_true",
+        help="on a clean run, emit the 'resolved — nothing outstanding' banner (exit 0)",
+    )
+    prp.add_argument(
+        "--close-after",
+        type=int,
+        default=7,
+        help="clean-streak length after which the resolved banner marks the issue for closing",
+    )
     prp.set_defaults(func=cmd_report)
 
     pin = sub.add_parser("init", help="scaffold a schema-valid starter loop spec")

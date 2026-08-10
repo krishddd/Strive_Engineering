@@ -20,6 +20,15 @@ from typing import Any
 # Results that are "news" — mirrors scheduler.NOTIFY_RESULTS.
 ACTIONABLE_RESULTS = {"found", "proposed", "merged", "escalated", "error"}
 
+# Marker the CI publish step greps for to decide whether to *close* the rolling
+# issue (vs. merely edit it to the resolved banner). Kept as an HTML comment so
+# it is invisible in the rendered issue.
+CLOSE_MARKER = "<!-- loop-report:close -->"
+
+# After this many consecutive clean runs, a previously-published issue is stale
+# enough to close outright rather than keep editing.
+DEFAULT_CLOSE_AFTER = 7
+
 _BUCKET_ORDER = ("high", "watch", "noise")
 _BUCKET_HEADINGS = {
     "high": "High — look at these",
@@ -31,6 +40,17 @@ _BUCKET_HEADINGS = {
 def is_actionable(section: dict[str, Any]) -> bool:
     """Whether this section's last run produced something a human should see."""
     return section.get("last_result") in ACTIONABLE_RESULTS
+
+
+def trailing_clean(results: list[str]) -> int:
+    """Count consecutive ``clean`` results at the end of a run-log result list."""
+    n = 0
+    for r in reversed(results):
+        if r == "clean":
+            n += 1
+        else:
+            break
+    return n
 
 
 def _escape(text: str) -> str:
@@ -75,4 +95,41 @@ def render_markdown(loop_id: str, section: dict[str, Any]) -> str:
         "_report was written; a run with a fabricated SHA is rejected, not published._",
         "",
     ]
+    return "\n".join(lines)
+
+
+def render_resolved_markdown(
+    loop_id: str, section: dict[str, Any], consecutive_clean: int, close_after: int = DEFAULT_CLOSE_AFTER
+) -> str:
+    """Render the "nothing outstanding" banner for a clean run.
+
+    A rolling issue that only ever gets *edited on findings* becomes a triage
+    inbox items can enter but never leave: fifteen clean days later it still reads
+    as if last month's findings are live. This banner is the resolution path — a
+    clean run overwrites the issue body with an explicit "resolved as of <date>"
+    state, and once the clean streak crosses ``close_after`` the issue is stale
+    enough to close (signalled by an invisible marker the CI step greps for)."""
+    last_run = section.get("last_run", "?")
+    phase = section.get("phase", "?")
+    should_close = consecutive_clean >= close_after
+    lines = [
+        f"# Loop report: `{_escape(loop_id)}`",
+        "",
+        "## ✅ Resolved — nothing outstanding",
+        "",
+        f"The last **{consecutive_clean}** run(s) were clean; no new commits need triage.",
+        f"Previously reported findings are considered resolved.",
+        "",
+        f"| Phase | Last run (UTC) | Consecutive clean runs |",
+        f"|---|---|---|",
+        f"| {phase} | {last_run} | {consecutive_clean} |",
+        "",
+        "---",
+        "_Maintained automatically by the daily-triage loop (report-only, L1)._",
+        "_A future run that surfaces something will replace this banner with the findings._",
+        "",
+    ]
+    if should_close:
+        lines.append(CLOSE_MARKER)
+        lines.append("")
     return "\n".join(lines)

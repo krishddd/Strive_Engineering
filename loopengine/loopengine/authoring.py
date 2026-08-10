@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 # worktree snapshot through a maker+checker round and may retry up to the cap.
 _KIND_BASE_TOKENS = {
     "git-commit-triage": 3_000,
+    "pr-triage": 3_000,
     "assisted-fix": 30_000,
 }
 _SECONDS_PER_DAY = 86_400
@@ -58,6 +59,18 @@ def scaffold_spec(loop_id: str, kind: str = "git-commit-triage") -> dict:
                 "first_run_since": "7 days ago",
             },
             "budget": {"max_tokens": 50_000, "max_iterations": 1, "wall_clock_secs": 300},
+        }
+    if kind == "pr-triage":
+        return {
+            "id": loop_id,
+            "kind": kind,
+            "phase": "L1",
+            "cadence": "1d",
+            "paused": False,
+            "state_file": ".loop-state/state.json",
+            "target": {"slug": "owner/name"},
+            "connectors": [{"name": "github", "scope": "read"}],
+            "budget": {"max_tokens": 30_000, "max_iterations": 1, "wall_clock_secs": 300},
         }
     # assisted-fix
     return {
@@ -195,6 +208,12 @@ def audit_spec(spec: dict) -> AuditReport:
     # Pillar 2 — verifier (kind-appropriate)
     if kind == "git-commit-triage":
         has_verifier = add("verifier", True, "grounded SHA verification (built-in, ungameable)")
+    elif kind == "pr-triage":
+        has_verifier = add(
+            "verifier",
+            True,
+            "injection-gated GitHub API data; findings cite real PR numbers (report-only L1)",
+        )
     elif kind == "assisted-fix":
         tc = bool(spec.get("test_command"))
         has_verifier = add(

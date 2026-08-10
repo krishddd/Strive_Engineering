@@ -13,7 +13,7 @@ and the orchestration in **Python**.
 ![rust](https://img.shields.io/badge/rust-loopguard-orange?logo=rust)
 ![python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![phase](https://img.shields.io/badge/phases-L0%E2%86%92L3-3ee8c5)
-![tests](https://img.shields.io/badge/tests-120%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-135%20passing-brightgreen)
 ![status](https://img.shields.io/badge/status-active-brightgreen)
 
 </div>
@@ -291,13 +291,15 @@ Open the dashboard at `http://127.0.0.1:8765` and click **Load live**, or open
 Strive_Engineering/
 ├── crates/loopguard/      # Rust core: guard, budget, verifier (+ isomorphic),
 │                          #   integrity, injection, policy (lib + JSON CLI) — 34 tests
-├── loopengine/            # Python runtime: runtime, assisted, makers, connectors,
-│                          #   scheduler (+ anomaly guard), compaction, authoring,
-│                          #   report, proposer, reflexion, consistency,
-│                          #   dashboard_api, CLI — 86 tests
+├── loopengine/            # Python runtime: runtime, prtriage, assisted, makers,
+│                          #   connectors, scheduler (+ anomaly guard), compaction,
+│                          #   authoring, report, proposer, reflexion, consistency,
+│                          #   dashboard_api, CLI — 101 tests
 ├── schemas/               # JSON Schema for a loop spec
 ├── loops/                 # example loop definitions (real targets stay gitignored)
 ├── dashboard/             # HTML/JS observability viewer (+ live JSON API)
+├── scripts/               # helper/verifier scripts a hook calls (guard_bash, scrub_mojibake)
+├── .claude/               # enforcement layer: PreToolUse hook config (settings.json)
 ├── docs/                  # concepts, verification critique, safety, failure modes, arXiv refs
 └── .github/workflows/     # CI: fmt + clippy + cargo test + pytest
                            #   + the daily-triage loop (cron → loop-state branch → rolling issue)
@@ -388,9 +390,17 @@ code path exists, so even a misconfigured `scope: write` grant cannot turn it in
 a write connector. Issue/PR bodies (classic indirect-injection carriers) are capped
 and pass the same injection gate as any other tool return.
 
+The **`pr-triage`** loop kind puts that connector to work: it triages a repo's open
+PRs read-only (cursor-gated, so a quiet day is a *clean* run, not a re-report),
+buckets them (a bot `loop/*` proposal awaiting review or a `fix:`/`security` PR is
+*high*, drafts are *noise*), and cites each finding's real PR number. It stays L1
+by design — its grounding (injection-scanned API data) is weaker than commit-triage's
+loopguard-resolved SHAs, so it reports, it never acts. See
+[`loops/example-pr-triage.json`](loops/example-pr-triage.json).
+
 ## Build phases — gate before advancing
 
-`L0` manual → **`L1` report-only** (`git-commit-triage`) → **`L2` assisted PRs**
+`L0` manual → **`L1` report-only** (`git-commit-triage`, `pr-triage`) → **`L2` assisted PRs**
 (`assisted-fix`: verifier + worktrees, propose-only) → **`L3` unattended**
 (`assisted-fix` + allowlist auto-merge). Default posture: **start at L1, stay
 until boring.**
@@ -406,8 +416,18 @@ pip install -e "loopengine[dev]" && pytest loopengine/tests -q   # Python (86)
 CI runs all of the above on every push. On a daily cron it also runs the
 **closed self-triage loop**: restore cursors from the `loop-state` branch →
 triage this repo (report-only L1) → publish actionable findings to a rolling
-issue labeled `loop-report` (a clean run publishes nothing) → persist state
-back to the `loop-state` branch.
+issue labeled `loop-report`, or, on a clean run, edit that issue to a
+"resolved — nothing outstanding" banner (closing it after a clean streak) so the
+inbox reflects reality → persist state back to the `loop-state` branch.
+
+### Enforcement layer (hooks)
+
+CLAUDE.md's safety rules are advisory as prose; the ones that must hold every time
+are turned into a **PreToolUse hook** (`.claude/settings.json` →
+[`scripts/hooks/guard_bash.py`](scripts/hooks/guard_bash.py)) that blocks
+force-push, `rm -rf`, and history-rewrite in interactive sessions — the same
+denylist discipline the Rust `loopguard` applies to loop-spawned commands, now
+covering the human-in-the-loop half too.
 
 ## Status
 
@@ -422,7 +442,8 @@ back to the `loop-state` branch.
   a **markdown loop reporter**, a **multi-loop scheduler**
   (cadence + priority + triage-inbox + collision guard + **anomaly/oscillation halting**),
   **context compaction + structured note-taking**, **spec authoring/cost/audit** tooling,
-  and a **read-only dashboard JSON API** — **86 tests**; all deterministic (injected clock
+  a **read-only `pr-triage` loop** over the guarded GitHub connector, and a
+  **read-only dashboard JSON API** — **101 tests**; all deterministic (injected clock
   / runner / transport / summarizer — no sockets).
 - ✅ JSON schema (per-kind conditional validation), example loops, dashboard, CI,
   [arXiv bibliography](docs/research-arxiv.md).
