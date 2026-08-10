@@ -153,6 +153,7 @@ jobs:
         with:
           name: triage-state
           path: .loop-state/
+          include-hidden-files: true   # .loop-state is a dot-dir; v4 skips hidden by default
 
   # A second L1 loop, deliberately read-only: triage this repo's open PRs over the
   # guarded (read-only, injection-scanned) GitHub connector. The job's token is
@@ -204,3 +205,4 @@ jobs:
         with:
           name: pr-triage-state
           path: .loop-state/
+          include-hidden-files: true   # .loop-state is a dot-dir; v4 skips hidden by default
