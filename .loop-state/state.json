@@ -3,19 +3,13 @@
   "loops": {
     "ci-self-triage": {
       "phase": "L1",
-      "last_run": "2026-08-10T06:44:44Z",
-      "last_result": "found",
+      "last_run": "2026-08-11T06:07:45Z",
+      "last_result": "clean",
       "cursors": {
         "main": "2de6919bec37c265bd4e057ef7144111c3fab75a"
       },
-      "findings": [
-        {
-          "bucket": "watch",
-          "text": "ci: capture the hidden .loop-state dir in triage artifacts",
-          "sha": "2de6919"
-        }
-      ],
-      "note": "",
+      "findings": [],
+      "note": "no new commits since cursors",
       "tokens_spent": 0
     }
   }
