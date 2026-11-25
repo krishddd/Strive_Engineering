@@ -140,3 +140,4 @@
 {"ts": "2026-11-22T13:25:00Z", "loop": "ci-self-triage", "result": "clean", "action": "wrote-state", "high": 0, "watch": 0, "note": "no new commits since cursors"}
 {"ts": "2026-11-23T16:05:09Z", "loop": "ci-self-triage", "result": "clean", "action": "wrote-state", "high": 0, "watch": 0, "note": "no new commits since cursors"}
 {"ts": "2026-11-24T15:57:39Z", "loop": "ci-self-triage", "result": "clean", "action": "wrote-state", "high": 0, "watch": 0, "note": "no new commits since cursors"}
+{"ts": "2026-11-25T15:42:54Z", "loop": "ci-self-triage", "result": "clean", "action": "wrote-state", "high": 0, "watch": 0, "note": "no new commits since cursors"}
